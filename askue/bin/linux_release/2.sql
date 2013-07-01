@@ -1,0 +1,6 @@
+SELECT MAX ( time_tbl.time ) FROM time_tbl
+	WHERE NOT EXISTS ( SELECT reg_tbl.time, reg_tbl.date FROM reg_tbl
+				     WHERE time_tbl.time = reg_tbl.time 
+				      AND ( reg_tbl.date = '2013-04-05' ) 
+				      AND reg_tbl.cnt = 234
+				      AND SUBSTR ( reg_tbl.type, 1, 1 ) = 'p' );

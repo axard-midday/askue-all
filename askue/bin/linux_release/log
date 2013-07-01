@@ -1,0 +1,4 @@
+../../src/./askue_plugin.c: В функции «__new_plugin»:
+../../src/./askue_plugin.c:95:9: предупреждение: assignment discards «const» qualifier from pointer target type [по умолчанию включена]
+../../src/./askue_plugin.c: В функции «askue_launcher_get_plugin»:
+../../src/./askue_plugin.c:214:2: предупреждение: при возврате результата функции целое преобразуется в указатель без приведения типа [по умолчанию включена]

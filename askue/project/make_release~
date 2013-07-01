@@ -1,0 +1,7 @@
+mkdir -p ../bin/linux_release
+
+make compile_flags="-std=c99" \
+	--directory=../bin/linux_release \
+	--makefile=../../project/Makefile
+	
+strip -s askue_launcher

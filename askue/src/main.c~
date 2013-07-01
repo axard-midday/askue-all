@@ -1,0 +1,691 @@
+#include <libconfig.h>
+#include <libaskue.h>
+#include <config.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+#include <sys/types.h> 
+#include <sys/wait.h>
+
+#define MODEM_FILE "modem.cfg"
+
+#define DEVICE_FILE "device.cfg"
+
+typedef struct
+{
+	config_setting_t *id;
+	time_t *t;
+} start_time_t;
+
+typedef struct
+{
+	size_t size;
+	start_time_t data[ 0 ];
+} start_time_array_t;
+
+/*
+ * Выполнить команду
+ */
+int exec_cmd ( const char *cmd );
+
+/*
+ * Установить конфигурацию модема
+ */
+int set_modem_config ( const char *base_modem_name, const char *remote_modem_name, uint32_t base_modem_timeout );
+
+/*
+ * Установить конфигурацию устройства
+ */
+int set_device_config ( const char *device_name, uint32_t device_timeout );
+
+/*
+ * Изменить размер хеш таблицы
+ */
+start_time_array_t* start_time_array_resize ( start_time_array_t *arr, size_t size );
+
+/*
+ * Найти ключ в хеш таблице
+ */
+int start_time_array_find ( start_time_array_t* arr, config_setting_t *key );
+
+/*
+ * Добавить ключ в хеш таблицу
+ */
+start_time_array_t* start_time_array_append ( start_time_array_t* arr, config_setting_t *key, size_t time_amount );
+
+/*
+ * Удалить хеш таблицу
+ */
+start_time_array_t* start_time_array_delete ( start_time_array_t *arr );
+
+/*
+ * Найти скрипт по указанному типу
+ */
+config_setting_t *find_script ( config_setting_t *script_set_k, const char *script_type );
+
+/*
+ * Получить команду
+ */
+const char* get_cmd ( config_setting_t *script_k, size_t number );
+
+/*
+ * Получить период выполнения команды
+ */
+time_t get_cmd_period ( config_setting_t *script_k, size_t number );
+
+/*
+ * Получить кол-во команд
+ */
+size_t get_cmd_amount ( config_setting_t *script_k );
+
+/*
+ * Выполнить скрипт
+ */
+int exec_script ( config_setting_t *script_k, config_setting_t *device, start_time_array_t **start_time );
+
+/*
+ * Получить базовый модем
+ */
+const char* get_base_modem ( config_setting_t *modem_k );
+
+/*
+ * Выполнить скрипты устройству
+ */
+int device_do_script ( config_setting_t *script_set_k, config_setting_t *modem_k,
+                       config_setting_t *device, start_time_array_t **start_time );
+
+/*
+ * Обход ветви
+ */
+int traverse_branch ( config_setting_t *script_set_k, config_setting_t *modem_k,
+                      config_setting_t *branch, start_time_array_t **start_time );
+
+/*
+ * Обход сети
+ */
+int traverse_network ( const config_t *cfg, start_time_array_t **start_time );
+
+
+int main()
+{
+	config_t cfg;
+
+	config_init ( &cfg );
+
+	if ( config_read_file ( &cfg, "./test.cfg" ) == CONFIG_TRUE ) //открыть и прочитать файл
+	{
+		start_time_array_t *start_time = NULL;
+		
+		while ( traverse_network ( &cfg, &start_time ) != -1 );
+
+		start_time_array_delete ( start_time );
+	}
+	else
+	{
+		log_write ( stderr, "%s (line: %d); %s (%d)", config_error_text ( &cfg ),
+		            config_error_line ( &cfg ), strerror ( errno ), errno );
+	}
+		
+
+	config_destroy ( &cfg );
+	
+	return 0;
+}
+
+
+int exec_cmd ( const char *_cmd )
+{
+	int cmd_status;
+	
+	if ( _cmd != NULL )
+	{
+		pid_t pid = fork ();
+		
+		if  ( pid < (pid_t)0 ) //ошибка
+		{
+			log_write ( stderr, "Ошибка fork(): %s ( %d )", strerror ( errno ), errno );
+		}
+		else if ( pid == (pid_t)0 ) //потомок
+		{
+			char *const cmd_argv[] = { ( char *const )_cmd, NULL };
+			
+			if ( execv ( _cmd, cmd_argv ) < 0 )
+			{			
+				log_write ( stderr, "Ошибка execv(): %s ( %d )", strerror ( errno ), errno );
+				
+				exit ( -1 );
+			}
+		}
+		else //родитель
+		{		
+			// получаем статус завершение
+            wait( &cmd_status );
+		}
+	}
+	
+	return cmd_status;
+}
+
+int set_modem_config ( const char *base_modem_name, const char *remote_modem_name, uint32_t base_modem_timeout )
+{
+	int status = -1;
+	
+	if ( base_modem_name != NULL && remote_modem_name != NULL )
+	{
+		config_t cfg;
+	
+		config_init ( &cfg );
+	
+		config_setting_t *root_setting = config_root_setting ( &cfg );
+	
+		if ( root_setting != NULL )
+		{
+			//создать ключи
+			config_setting_t *base_modem_name_k = config_setting_add ( root_setting, "base_modem", CONFIG_TYPE_STRING );
+			config_setting_t *remote_modem_name_k = config_setting_add ( root_setting, "remote_modem", CONFIG_TYPE_STRING );
+			config_setting_t *base_modem_timeout_k = config_setting_add ( root_setting, "base_modem_timeout", CONFIG_TYPE_INT );
+
+			//проверить
+			if ( ( base_modem_name_k != NULL ) &&
+				 ( remote_modem_name_k != NULL ) &&
+				 ( base_modem_timeout_k != NULL ) )
+			{
+				//заполнить ключи
+				if ( ( config_setting_set_string ( base_modem_name_k, base_modem_name ) == CONFIG_TRUE ) &&
+					 ( config_setting_set_string ( remote_modem_name_k, remote_modem_name ) == CONFIG_TRUE ) &&
+					 ( config_setting_set_int ( base_modem_timeout_k, base_modem_timeout ) == CONFIG_TRUE ) )
+				{
+					if ( config_write_file ( &cfg, MODEM_FILE ) == CONFIG_TRUE )
+						status = 0; 
+				}
+				else
+				{
+					time_t t = time ( NULL );
+					log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+					        	"Ошибка заполнения полей в конфигурации модема" );
+				}
+			}
+			else
+			{
+				time_t t = time ( NULL );
+				log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+			            	"Ошибка добавления полей в конфигурацию модема" );
+			}
+		}
+		else
+		{
+			time_t t = time ( NULL );
+			log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+		            	"Ошибка создания корневого поля в конфигурации" );
+		}
+
+		config_destroy ( &cfg );
+	}
+	else
+		status = 0;
+	
+	return status;
+}
+
+int set_device_config ( const char *device_name, uint32_t device_timeout )
+{
+	config_t cfg;
+	
+	config_init ( &cfg );
+	
+	config_setting_t *root_setting = config_root_setting ( &cfg );
+	
+	int status = -1;
+	
+	if ( root_setting != NULL )
+	{
+		//создать ключи
+		config_setting_t *device_name_k = config_setting_add ( root_setting, "device", CONFIG_TYPE_STRING );
+		config_setting_t *device_timeout_k = config_setting_add ( root_setting, "device_timeout", CONFIG_TYPE_INT );
+
+		//проверить
+		if ( ( device_name_k != NULL ) &&
+		     ( device_timeout_k != NULL ) )
+		{
+			//заполнить ключи
+			if ( ( config_setting_set_string ( device_name_k, device_name ) == CONFIG_TRUE ) &&
+			     ( config_setting_set_int ( device_timeout_k, device_timeout ) == CONFIG_TRUE ) )
+			{
+				if ( config_write_file ( &cfg, DEVICE_FILE ) == CONFIG_TRUE )
+					status = 0; 
+			}
+			else
+			{
+				time_t t = time ( NULL );
+				log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+			            	"Ошибка заполнения полей в конфигурации устройства" );
+			}
+		}
+		else
+		{
+			time_t t = time ( NULL );
+			log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+			            "Ошибка добавления ключей в конфигурацию устройства" );
+		}
+	}
+	else
+	{
+		time_t t = time ( NULL );
+		log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+		           	"Ошибка создания корневого поля в конфигурации" );
+	}
+
+	config_destroy ( &cfg );
+	
+	return status;
+}
+
+start_time_array_t* start_time_array_resize ( start_time_array_t *arr, size_t size )
+{
+	start_time_array_t *tmp = ( start_time_array_t* ) realloc ( arr, 
+	                                                            sizeof ( start_time_array_t* ) + size * sizeof ( start_time_t ) );
+
+	if ( tmp != NULL )
+	{
+		tmp -> size = size;
+		tmp -> data[ size ].t = NULL;
+		tmp -> data[ size ].id = NULL;
+	}
+	return tmp;
+}
+
+int start_time_array_find ( start_time_array_t* arr, config_setting_t *key )
+{
+	int is_new = -1;
+
+	if ( arr != NULL )
+	{
+		//поиск ключа
+		for ( size_t i = 0; i < arr -> size; i++ )
+		{
+			//проверка
+			if ( arr -> data[ i ].id == key )
+			{
+				is_new = i;
+				break;
+			}
+			else
+				is_new = -1;
+		}
+	}
+	
+	return is_new;
+}
+
+start_time_array_t* start_time_array_append ( start_time_array_t* arr, config_setting_t *key, size_t time_amount )
+{
+	size_t size = ( arr == NULL ) ? 1: arr -> size + 1;
+	
+	start_time_array_t *tmp = start_time_array_resize ( arr, size );
+
+	if ( tmp != NULL )
+	{
+		tmp -> data[ size - 1 ].id = key;
+		tmp -> data[ size - 1 ].t = ( time_t * ) malloc ( sizeof ( time_t ) * time_amount );
+	}
+
+	return tmp;
+}
+
+start_time_array_t* start_time_array_delete ( start_time_array_t *arr )
+{
+	if ( arr != NULL )
+	{
+		for ( size_t i = 0; i < arr -> size; i++ )
+		if ( arr -> data[ i ].t != NULL )
+		{
+			free ( arr -> data[ i ].t );
+		}
+		
+		free ( arr );
+	}
+	return NULL;
+}
+
+/*
+ * Найти скрипт по указанному типу
+ */
+config_setting_t *find_script ( config_setting_t *script_set_k, const char *script_type )
+{
+	config_setting_t *result = NULL;
+
+	if ( script_set_k != NULL )
+	{
+		//число скриптов
+		size_t script_amount = config_setting_length ( script_set_k );
+
+		//поиск
+		for ( size_t i = 0; i < script_amount; i++ )
+		{
+			config_setting_t *script_k = config_setting_get_elem ( script_set_k, i );
+			const char *script_type_str;
+
+			//проверка по типу
+			if ( config_setting_lookup_string ( script_k, "type", &script_type_str ) == CONFIG_TRUE )
+			{		
+				if ( !strcmp ( script_type_str, script_type ) )
+				{
+					result = script_k;
+					break;
+				}
+			}
+		}
+	}
+	
+	return result;
+}
+
+/*
+ * Получить команду
+ */
+const char* get_cmd ( config_setting_t *script_k, size_t number )
+{
+	//все команды
+	config_setting_t *commands_k = config_setting_get_member ( script_k, "commands" );
+
+	config_setting_t *cmd_k = config_setting_get_elem ( commands_k, number );
+
+	const char *cmd_str;
+
+	if ( config_setting_lookup_string ( cmd_k, "cmd", &cmd_str ) == CONFIG_TRUE )
+		return cmd_str;
+	else 
+	    return NULL;
+}
+
+/*
+ * Получить период выполнения команды
+ */
+time_t get_cmd_period ( config_setting_t *script_k, size_t number )
+{
+	/*
+	 * Перевести период в переменную времени из текстового представления
+	 */
+	time_t get_period ( const char *str )
+	{
+		if ( strlen ( str ) == 8 )
+		{
+			uint32_t hour;
+			uint32_t min;
+			uint32_t sec;
+		
+			sscanf ( str, "%2d:%2d:%2d", &hour, &min, &sec );
+		
+			time_t result = ( time_t ) ( 3600 * hour + 60 * min + sec );
+		
+			return result;
+		}
+		else
+			return ( time_t )0;
+	}
+	//все команды
+	config_setting_t *commands_k = config_setting_get_member ( script_k, "commands" );
+
+	config_setting_t *cmd_k = config_setting_get_elem ( commands_k, number );
+
+	const char *period_str;
+
+	if ( config_setting_lookup_string ( cmd_k, "period", &period_str ) == CONFIG_TRUE )
+		return get_period ( period_str );
+	else 
+	    return ( time_t )0;
+}
+
+/*
+ * Получить кол-во команд
+ */
+size_t get_cmd_amount ( config_setting_t *script_k )
+{
+	//все команды
+	config_setting_t *commands_k = config_setting_get_member ( script_k, "commands" );
+
+	return config_setting_length ( commands_k );
+}
+
+/*
+ * Выполнить скрипт
+ */
+int exec_script ( config_setting_t *script_k, config_setting_t *device, start_time_array_t **start_time )
+{
+	int result = -1;
+
+	if ( script_k != NULL )
+	{
+		size_t cmd_amount = get_cmd_amount ( script_k );
+
+		//выполнение команд
+		for ( size_t i = 0; i < cmd_amount; i++ )
+		{
+			//проверить есть ли такое устройство
+			int index = start_time_array_find ( ( *start_time ), device );
+
+			if ( index == -1 ) //нет такого устройства
+			{
+				//выполнить команду
+				result = exec_cmd ( get_cmd ( script_k, i ) );
+			
+				if ( result == -1 )
+				{
+					break;
+				}
+				else
+				{
+					//добавить такое устройство
+					( *start_time ) = start_time_array_append ( ( *start_time ), 
+								                                device,
+						                                        cmd_amount );
+					if ( (*start_time) != NULL ) //добавить время следующего запуска
+					{
+						( *start_time ) -> data[ ( *start_time ) -> size ].t[ i ] = time ( NULL ) + get_cmd_period ( script_k, i ); 
+					}
+					else
+						result = -1;
+				}
+
+				                                          							                  
+			}
+			else
+			{
+				//Пришло время?
+				if ( ( *start_time ) -> data[ index ].t[ i ] >= time( NULL ) )
+				{
+					//выполнить команду
+					result = exec_cmd ( get_cmd ( script_k, i ) );
+					if ( result == -1 )
+					{
+						break;
+					}
+					else
+					{
+						( *start_time ) -> data[ index ].t[ i ] = time( NULL ) + get_cmd_period ( script_k, i ); 
+					}
+				}
+				else
+					result = 0;
+			}
+		}
+	}
+	else
+		result = 0;
+
+	return result;
+}
+
+const char* get_base_modem ( config_setting_t *modem_k )
+{
+	//считать имя устройства
+	const char* device_name;
+
+	if ( config_setting_lookup_string ( modem_k, "name", &device_name ) == CONFIG_TRUE )
+	{
+		return device_name;
+	}
+	else
+		return NULL;
+}
+
+/*
+ * Устройства
+ */
+int device_do_script ( config_setting_t *script_set_k, config_setting_t *modem_k,
+                       config_setting_t *device, start_time_array_t **start_time )
+{	
+	int result = -1;
+
+	if ( device != NULL )
+	{
+		//считать имя устройства
+		const char* device_name;
+
+		if ( config_setting_lookup_string ( device, "name", &device_name ) == CONFIG_TRUE )
+		{
+			//тип устройства
+			const char* device_type;
+
+			if ( config_setting_lookup_string ( device, "type", &device_type ) == CONFIG_TRUE )
+			{
+				//считать время ожидания ответа от устройства
+				long int device_timeout;
+
+				if ( config_setting_lookup_int ( device, "timeout", &device_timeout ) == CONFIG_TRUE )
+				{
+					if ( !strcmp ( device_type, "PLC" ) )
+					{
+						if ( !set_modem_config ( get_base_modem ( modem_k ), device_name, device_timeout ) )
+						{
+							result = exec_script ( find_script ( script_set_k, device_type ),
+							                       device,
+							                       start_time );
+						}
+					}
+					else if ( !set_device_config ( device_name, device_timeout ) )
+					     {
+						 	 result = exec_script ( find_script ( script_set_k, device_type ),
+							                        device,
+							                        start_time );
+						 }
+					
+				}
+				else
+				{
+					time_t t = time ( NULL );
+					log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+					            "Не найден таймаут устройства", device_name );
+				}
+			}
+			else
+			{
+				time_t t = time ( NULL );
+				log_write ( stderr, "%s: %s: %s\n", asctime ( localtime ( &t ) ), 
+				            "Не найден тип устройства", device_name );
+			}
+		}
+		else
+		{
+			time_t t = time ( NULL );
+			log_write ( stderr, "%s: %s\n", asctime ( localtime ( &t ) ), 
+			            "Не найден номер устройства" );
+		}
+	}
+	else
+		result = 0;
+		
+	return result;
+}
+
+/*
+ * Ветви
+ */
+int traverse_branch ( config_setting_t *script_set_k, config_setting_t *modem_k,
+                      config_setting_t *branch, start_time_array_t **start_time )
+{
+	int result = -1;
+	
+	if ( branch != NULL )
+	{
+		//найти ключ "modem"
+		if ( device_do_script ( script_set_k, modem_k, config_setting_get_member ( branch, "modem" ), start_time ) == 0 )
+		{
+			//найти ключ устройства
+			config_setting_t* device_k = config_setting_get_member ( branch, "device" );
+
+			if ( device_k != NULL )
+			{
+				//кол-во устройств
+				size_t device_amount = config_setting_length ( device_k );
+
+				//добавление устройств в ветку
+				for ( size_t i = 0; i < device_amount; i++ )
+				{
+					result = device_do_script ( script_set_k, modem_k, config_setting_get_elem ( device_k, i ), start_time );
+
+					if ( result != 0 )
+						break;
+				}
+			}
+			else //не найдено ни одного устройства - какая-то ошибка
+			{
+				time_t t = time ( NULL );
+				log_write ( stderr, "%s: %s\n", asctime ( localtime ( &t ) ), 
+				            "В ветви не найдены устройства" );
+			}
+		}
+	}
+	else
+		result = 0;
+	
+	return result;
+}
+
+/*
+ * Сети
+ */
+int traverse_network ( const config_t *cfg, start_time_array_t **start_time )
+{
+	int result = -1;
+
+	config_setting_t *network_k = config_lookup ( cfg, "network" );
+	config_setting_t *script_set_k = config_lookup ( cfg, "script_set" );
+	config_setting_t *modem_k = config_lookup ( cfg, "network.base.modem" );
+
+	if ( network_k != NULL && script_set_k != NULL )
+	{
+		//базовая часть
+		if ( traverse_branch ( script_set_k, modem_k, config_setting_get_member ( network_k, "base" ), start_time ) == 0 )
+		{
+			result = 0;
+			
+			config_setting_t* remote = config_setting_get_member ( network_k, "remote" );
+
+			if ( remote != NULL )
+			{
+				//узнать кол-во ветвей
+				size_t remote_branch_amount = config_setting_length ( remote );
+
+				//обход всех ветвей
+				for ( size_t i = 0; i < remote_branch_amount; i++ )
+				{
+					result = traverse_branch ( script_set_k, modem_k, config_setting_get_elem ( remote, i ), start_time );
+
+					if ( result != 0 )
+						break;
+				}
+			}
+		}
+		else
+		{
+			time_t t = time ( NULL );
+			log_write ( stderr, "%s: %s\n", asctime ( localtime ( &t ) ), "Конфигурация не содержит базовой части" );
+		}
+	}
+	
+	return result;
+}
+

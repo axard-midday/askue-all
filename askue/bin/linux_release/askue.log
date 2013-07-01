@@ -1,0 +1,32 @@
+2013-04-11 10:57:13: Hello world
+
+2013-04-11 10:57:48: Ошибка sqlite: 2 values for 3 columns
+
+2013-04-11 10:59:58: Ошибка sqlite: 2 values for 3 columns
+
+2013-04-11 11:00:15: Ошибка sqlite: 2 values for 3 columns
+
+2013-04-11 11:04:18: Ошибка sqlite: 2 values for 3 columns
+
+2013-04-11 11:04:22: Ошибка sqlite: 2 values for 3 columns
+
+2013-04-11 11:49:02: Ошибка sqlite: 2 values for 3 columns
+
+2013-04-11 11:50:09: Ошибка sqlite: near "0": syntax error
+
+2013-04-11 11:51:05: Ошибка sqlite: near "0": syntax error в запросе << INSERT INTO modem_tbl ( modem, type, remote_flag ) VALUES ( '4100', 'PLC' 0 ); >>
+
+2013-04-12 10:34:36: Ошибка sqlite: near "(": syntax error в запросе << CREATE UNIQUE INDEX IF NOT EXISTS log_id ( date text, time text, msg text ); >>
+
+2013-04-12 10:34:38: Ошибка sqlite: near "(": syntax error в запросе << CREATE UNIQUE INDEX IF NOT EXISTS log_id ( date text, time text, msg text ); >>
+
+2013-04-12 10:35:05: Ошибка sqlite: near "(": syntax error в запросе << CREATE UNIQUE INDEX IF NOT EXISTS log_id ( date text, time text, msg text ); >>
+
+2013-04-12 10:35:30: Ошибка sqlite: near "(": syntax error в запросе << CREATE UNIQUE INDEX IF NOT EXISTS log_id ( date text, time text, msg text ); >>
+
+2013-04-12 10:37:30: Ошибка sqlite: near "text": syntax error в запросе << CREATE UNIQUE INDEX IF NOT EXISTS log_id ON log_tbl ( date text, time text, msg text ); >>
+
+2013-05-21 15:25:09: Отсутствует поле 'Scripts' в конфигурации
+
+2013-05-21 15:46:19: Ошибка sqlite: callback requested query abort в запросе << SELECT cnt_tbl.cnt, cnt_tbl.type, cnt_tbl.timeout, cnt_tbl.modem, modem_tbl.remote_flag, modem_tbl.type FROM cnt_tbl, modem_tbl WHERE cnt_tbl.modem = modem_tbl.modem; >>
+

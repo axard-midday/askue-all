@@ -1,0 +1,22 @@
+#!/bin/sh
+
+mkdir -p ../bin/linux_release
+mkdir -p ../bin/linux_release/libaskue
+mkdir -p ../bin/linux_release/libaskue/Types
+mkdir -p ../bin/linux_release/libaskue/Utilites
+mkdir -p ../bin/linux_release/libaskue/Protocols
+
+all=$( find ../src/ -type f -name "*.h" )
+
+for src in $all
+do
+	dest=$( basename $( dirname $src ) )"/"$( basename $src )
+	
+	cp $src ../bin/linux_release/libaskue/$dest
+done
+
+cp ../src/libaskue.h ../bin/linux_release/libaskue.h
+
+make compile_flags="-std=c99" \
+	--directory=../bin/linux_release \
+	--makefile=../../project/Makefile

@@ -1,0 +1,1 @@
+make install --directory=../bin/linux_release --makefile=../../project/Makefile

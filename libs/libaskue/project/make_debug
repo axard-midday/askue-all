@@ -1,0 +1,24 @@
+mkdir -p ../bin/linux_debug
+mkdir -p ../bin/linux_debug/libaskue
+mkdir -p ../bin/linux_debug/libaskue/Types
+mkdir -p ../bin/linux_debug/libaskue/Utilites
+mkdir -p ../bin/linux_debug/libaskue/Protocols
+
+cp ../src/Protocols/cnt_ta.h ../bin/linux_debug/libaskue/Protocols/cnt_ta.h 
+cp ../src/Protocols/cnt_tm.h ../bin/linux_debug/libaskue/Protocols/cnt_tm.h 
+cp ../src/Protocols/cnt_mks.h ../bin/linux_debug/libaskue/Protocols/cnt_mks.h 
+cp ../src/Utilites/checksum.h ../bin/linux_debug/libaskue/Utilites/checksum.h 
+cp ../src/Utilites/common_macro.h ../bin/linux_debug/libaskue/Utilites/common_macro.h 
+cp ../src/Utilites/config.h ../bin/linux_debug/libaskue/Utilites/config.h 
+cp ../src/Utilites/utils.h ../bin/linux_debug/libaskue/Utilites/utils.h 
+cp ../src/Utilites/cnt_utils.h ../bin/linux_debug/libaskue/Utilites/cnt_utils.h 
+cp ../src/Utilites/rs232_port.h ../bin/linux_debug/libaskue/Utilites/rs232_port.h 
+cp ../src/Types/bool_type.h ../bin/linux_debug/libaskue/Types/bool_type.h 
+cp ../src/Types/fptr.h ../bin/linux_debug/libaskue/Types/fptr.h 
+cp ../src/Types/byte_array.h ../bin/linux_debug/libaskue/Types/byte_array.h 
+cp ../src/Types/ptr_type.h ../bin/linux_debug/libaskue/Types/ptr_type.h 
+cp ../src/libaskue.h ../bin/linux_debug/libaskue.h 
+
+make compile_flags="-std=c99" \
+	--directory=../bin/linux_debug \
+	--makefile=../../project/Makefile

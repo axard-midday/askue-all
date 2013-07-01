@@ -1,0 +1,6 @@
+#ifndef AVC
+#define AVC
+
+#define III { int i = 0; i++ }
+
+#endif

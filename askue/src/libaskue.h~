@@ -1,0 +1,16 @@
+#ifndef LIBASKUE_H_
+#define LIBASKUE_H_
+
+#include <./Types/bool_type.h>
+#include <./Types/byte_array.h>
+#include <./Utilites/checksum.h>
+#include <./Utilites/common_macro.h>
+#include <./Utilites/config.h>
+#include <./Types/list.h>
+#include <./Utilites/utils.h>
+#include <./Types/ptr_type.h>
+#include <./Utilites/rs232_port.h>
+#include <./Protocols/cnt_ta.h>
+#include <./Protocols/cnt_tm.h>
+
+#endif /* LIBASKUE_H_ */

@@ -1,0 +1,5 @@
+mkdir -p ../bin/linux_debug
+
+make compile_flags="-std=c99" \
+	--directory=../bin/linux_debug \
+	--makefile=../../project/Makefile

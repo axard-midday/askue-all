@@ -1,0 +1,19 @@
+#ifndef ASKUE_PLUGIN_H_
+#define ASKUE_PLUGIN_H_
+
+/*
+ * Открыть все возможные плагины
+ */
+void askue_launcher_init_plugins ( sqlite3 *db );
+
+/*
+ * Получить ссылку на плагин по его имени
+ */
+void* askue_launcher_get_plugin ( const char *name );
+
+/*
+ * Закрыть плагины
+ */
+void askue_launcher_close_plugins ( void );
+
+#endif /* ASKUE_PLUGIN_H_ */
