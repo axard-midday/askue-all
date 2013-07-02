@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#include "errcode.h"
+#include "macro.h"
+
 void errlog_method ( int exit_status, const char *fmt, ... )
 {
     va_list vaList;

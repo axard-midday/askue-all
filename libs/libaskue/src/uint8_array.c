@@ -1,4 +1,5 @@
 #include "uint8_array.h"
+#include "bool.h"
 #include "askue_memory.h"
 #include <stdint.h>
 #include <string.h>
@@ -64,3 +65,33 @@ uint8_array_t* uint8_array_update_u8a ( uint8_array_t *dest, const uint8_array_t
 	else
 		return dest;
 }
+
+bool_t uint8_array_compare_eq ( const uint8_array_t *u8a_1 ,const uint8_array_t *u8a_2 )
+{
+    if ( u8a_1->len != u8a_2->len )
+    {
+        return FALSE;
+    }
+    else
+    {
+        return memcmp ( u8a_1->data, u8a_2->data, u8a_1->len ) == 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

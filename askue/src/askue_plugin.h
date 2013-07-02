@@ -1,6 +1,7 @@
 #ifndef ASKUE_PLUGIN_H_
 #define ASKUE_PLUGIN_H_
 
+#include <sqlite3.h>
 /*
  * Открыть все возможные плагины
  */

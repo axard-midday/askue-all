@@ -7,12 +7,16 @@ all=$( find ../src/ -type f -name "*.h" )
 
 main="libaskue.h"
 
-for src in $all
+for src in $all 
 do
     dest=$( basename $src )
-    if [ $src -eq $main ]
+    
+    if [ "$dest" != "$main" ]
     then
         cp $src ../bin/libaskue/$dest
     else
         cp $src ../bin/$dest
+    fi
 done
+
+mv $1 ../bin/$1

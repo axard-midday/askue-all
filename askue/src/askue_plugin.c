@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <sqlite3.h>
 #include <string.h>
 #include <errno.h>
@@ -8,7 +9,6 @@
 #include <dlfcn.h>
 
 #include "askue_launcher_db.h"
-#include "askue_launcher_log_error.h"
 
 struct __plugin_t
 {
@@ -179,14 +179,14 @@ void askue_plugin_init ( sqlite3 *db )
 
 	int __callback ( void *ptr, int len, char **vals, char **cols )
 	{
-		Plugin_Set.item[ N ] = __new_plugin ( vals[ 0 ], __open_plugin_lib ( vals[ 0 ] ) );
+		Plugin_Set.item[ N ] = open_plugin ( vals[ 0 ] );
 		
-		( *( size_t* ) N )++;
+		N++;
 		
 		return 0;
 	}
 
-	sqlite3_exec_decor ( db, askue_sql_GET_PLUGINS, __callback, &N );
+	sqlite3_exec_decor ( db, askue_sql_GET_PLUGINS, __callback, NULL );
 }
 #undef askue_sql_GET_PLUGINS
 

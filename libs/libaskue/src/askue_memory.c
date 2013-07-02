@@ -1,5 +1,6 @@
 #include <stdlib.h>
-#include "log_error.h"
+
+#include "errcode.h"
 
 
 /*
