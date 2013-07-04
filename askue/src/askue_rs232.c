@@ -161,6 +161,7 @@ static struct timeval msec_to_timeval ( uint32_t _msec_timeout )
 	return cooked;
 }
 
+/*
 uint8_array_t* rs232_read ( int fd, uint32_t msec_timeout )
 {
 	int readen_bytes = 0;
@@ -212,7 +213,7 @@ uint8_array_t* rs232_read ( int fd, uint32_t msec_timeout )
 
 	return in;
 }
-
+*/
 
 void rs232_close( int rs232_fd )
 {
@@ -336,7 +337,7 @@ int rs232_apply( int rs232_fd, struct termios *T )
 	return tcsetattr ( rs232_fd, TCSAFLUSH, T );
 }
 
-uint8_array_t* rs232_read_v2 ( int fd, uint32_t start_timeout, uint32_t stop_timeout )
+int rs232_read ( int fd, uint32_t start_timeout, uint32_t stop_timeout, uint8_array_t** )
 {
 	uint8_array_t *in = uint8_array_new ( 0 );
 

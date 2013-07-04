@@ -1,12 +1,54 @@
 #define IsLast( __Unit__ ) ({ (__Unit__).Last; })
 
+askue_module_enviroment_t getEnviroment ( askue_cfg_t *Cfg )
+{
+    askue_module_enviroment_t Env;
+    Env.Buffer = Cfg->Buffer;
+    Env.LogFile = Cfg->LogFile;
+    Env.DB = Cfg->DB;
+    Env.PortFd = Cfg->RS232;
+    return Env;
+}
+
+void log_callback ( FILE *Log, char *Buffer, size_t BufferLen, const char *Format, ... )
+{
+    va_list vArgs;
+    va_start ( vArgs, Format );
+    vsnprintf ( Buffer, BufferLen, Format, vArgs );
+    fputs ( Buffer, Log );
+}
+
+int io_callback ( int Fd, const uint8_array_t *Out, uint8_array_t **In, long int StartTimeout, long int StopTimeout )
+{
+    int result = rs232_write ( Fd, Out );
+    
+    if ( result != Out->len )
+    {
+        return EE_WRITE;
+    }
+    
+    uint8_array_t *_In = rs232_read_v2 ( Fd, StartTimeout, StopTimeout );
+    
+    if ( _In )
+        *In = _In;
+    else
+    {
+        
+    }
+}
+
 int askue_request_loop ( askue_cfg_t *Cfg )
 {
 	askue_net_t *Net = &(Cfg->Net);
     
     askue_module_callbacks_t Callbacks;
+    Callbacks.LogCallback = ...;
+    Callbacks.DBCallback = ...;
+    Callbacks.JnlCallback = ...;
+    Callbacks.IOCallback = ...;
     // инициализация callback
     askue_module_enviroment_t Enviroment;
+    Enviroment = getEnviroment ( Cfg );
     // инициализация окружения 
     
     bool_t localNet = true;

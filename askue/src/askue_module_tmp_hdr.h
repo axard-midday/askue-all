@@ -4,7 +4,6 @@
 typedef struct
 {
     char *Buffer;
-    size_t BufferLen;
     FILE *LogFile;
     sqlite3 *DB;
     int PortFd;
