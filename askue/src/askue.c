@@ -13,7 +13,7 @@
 **********************************************/
 #define Ok( __MYFUNC__ ) ((__MYFUNC__) == EE_SUCCESS )
 
-#define CfgBufferSize 2048
+#define BUFFER_SIZE 2048
 
 #define ModuleNameSize 64
 
@@ -95,7 +95,7 @@ struct _askue_net_t
 // askue_cfg_t - конфигурация программы
 typedef struct
 {
-    char Buffer[ CfgBufferSize ];
+    char Buffer[ BUFFER_SIZE ];
     int ErrorCode;
     FILE *LogFile;
     int RS232;
@@ -108,7 +108,7 @@ typedef struct
 ({\
     askue_cfg_t _0_;\
     do {\
-        bzero ( _0_.Buffer, CfgBufferSize );\
+        bzero ( _0_.Buffer, BUFFER_SIZE );\
         _0_.ErrorCode = EE_SUCCESS;\
         _0_.LogFile = NULL;\
         _0_.RS232 = -1;\

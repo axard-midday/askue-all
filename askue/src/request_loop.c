@@ -10,15 +10,19 @@ askue_module_enviroment_t getEnviroment ( askue_cfg_t *Cfg )
     return Env;
 }
 
-void log_callback ( FILE *Log, char *Buffer, size_t BufferLen, const char *Format, ... )
+void log_callback ( FILE *Log, char *Buffer, const char *Format, ... )
 {
     va_list vArgs;
     va_start ( vArgs, Format );
-    vsnprintf ( Buffer, BufferLen, Format, vArgs );
+    vsnprintf ( Buffer, BUFFER_SIZE, Format, vArgs );
     fputs ( Buffer, Log );
+    va_end ( vArgs );
 }
 
-int io_callback ( int Fd, const uint8_array_t *Out, uint8_array_t **In, long int StartTimeout, long int StopTimeout )
+#define StartTimeout 0
+#define StopTimeout 1
+
+int io_callback ( int Fd, const uint8_array_t *Out, uint8_array_t **In, long int Timeout[ 2 ] )
 {
     int result = rs232_write ( Fd, Out );
     
@@ -27,25 +31,49 @@ int io_callback ( int Fd, const uint8_array_t *Out, uint8_array_t **In, long int
         return EE_WRITE;
     }
     
-    uint8_array_t *_In = rs232_read_v2 ( Fd, StartTimeout, StopTimeout );
-    
-    if ( _In )
-        *In = _In;
-    else
-    {
-        
-    }
+    return rs232_read ( Fd, Timeout[ StartTimeout ], Timeout[ StopTimeout ], In );
 }
+
+// callback types
+#define JNL_CALLBACK
+#define ENERGY_CALLBACK
+#define PROFILE_CALLBACK
+
+
+
+void db_callback ( sqlite3 *DB, int callback_type, ... )
+{
+    va_list vArgs;
+    va_start ( vArgs, Format );
+    
+    switch ( callback_type )
+    {
+        case JNL_CALLBACK: db_jnl_callback ()
+    }
+    
+    va_end ( vArgs );
+}
+
+void jnl_callback ( sqlite3 *DB, char *Buffer, const char *Format, ... )
+{
+    va_list vArgs;
+    va_start ( vArgs, Format );
+    vsnprintf ( Buffer, BUFFER_SIZE, Format, vArgs );
+    
+    db_callback ( DB, JNL_CALLBACK, Buffer );
+    va_end ( vArgs );
+}
+
 
 int askue_request_loop ( askue_cfg_t *Cfg )
 {
 	askue_net_t *Net = &(Cfg->Net);
     
     askue_module_callbacks_t Callbacks;
-    Callbacks.LogCallback = ...;
+    Callbacks.LogCallback = log_callback;
     Callbacks.DBCallback = ...;
-    Callbacks.JnlCallback = ...;
-    Callbacks.IOCallback = ...;
+    Callbacks.JnlCallback = jnl_callback;
+    Callbacks.IOCallback = io_callback;
     // инициализация callback
     askue_module_enviroment_t Enviroment;
     Enviroment = getEnviroment ( Cfg );

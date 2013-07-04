@@ -134,20 +134,24 @@ int rs232_open(const char* rs232_file_name)
 
 int rs232_write( int rs232_fd, const uint8_array_t *out )
 {
-    int written_bytes = 0;
+    int R, written_bytes = 0;
 
     for( size_t i = 0; i < out -> len; i++ )
 	{
         if( write ( rs232_fd, &(out -> data[i]), 1 ) < 0 )
 		{
 			written_bytes = -1;
+            R = EE_WRITE;
 			break;
 		}
 		else
         {
+            
 			written_bytes++;
         }
 	}
+
+    R = ( written_bytes == out->len ) ? EE_SUCCESS : EE_WRITE;
 
 	return written_bytes;
 }
@@ -337,14 +341,13 @@ int rs232_apply( int rs232_fd, struct termios *T )
 	return tcsetattr ( rs232_fd, TCSAFLUSH, T );
 }
 
-int rs232_read ( int fd, uint32_t start_timeout, uint32_t stop_timeout, uint8_array_t** )
+int rs232_read ( int fd, uint32_t start_timeout, uint32_t stop_timeout, uint8_array_t**in )
 {
-	uint8_array_t *in = uint8_array_new ( 0 );
-
+    int R;
+    
+	uint8_array_t *_in = uint8_array_new ( 0 );
 	struct timeval start_TVal = msec_to_timeval ( start_timeout ); // таймер на ожидание начала приёма
-
 	struct timeval stop_TVal = msec_to_timeval ( stop_timeout ); // таймер на ожидание конца приёма
-	
 	struct timeval tmp_TVal = start_TVal;
 
 	//стартануть таймер с первыми значениями
@@ -353,53 +356,58 @@ int rs232_read ( int fd, uint32_t start_timeout, uint32_t stop_timeout, uint8_ar
 		for ( ;; ) // событийный цикл
 		{
 			int bytes = 0;
-			
 			int rstatus = 0;
-			
+
 			ioctl(fd, FIONREAD, &bytes); // сколько символов считано
 			
 			if( bytes > 0 ) // есть доступные символы
 			{
 				uint8_t buf[ bytes ]; // буфер чтения
-
 				rstatus = read ( fd, &buf, bytes ); // читать все символы
 					
 				if( rstatus > 0 ) //символ считан
 				{
-					in = uint8_array_append_data ( in, buf, rstatus ); // добавить символы
+					_in = uint8_array_append_data ( _in, buf, rstatus ); // добавить символы
 
 					if ( start_reading_timer ( stop_TVal ) ) // стартануть таймер ожидания конца передачи
 					{
 						// ошибка запуска таймера
-						in = uint8_array_delete ( in );
-						
+						_in = uint8_array_delete ( _in );
 						rstatus = -1;
-						
+                        R = EE_TIMER;
+                        
 						break;
 					}
 				}
 				else if ( rstatus < 0 )
 				{
 					// ошибка чтения
-					in = uint8_array_delete ( in );
-						
+					_in = uint8_array_delete ( _in );
+                    R = EE_READ;
+                    	
 					break;	
 				}
 			}
 			
 			int tstatus = fire_reading_timer (); // проверка окончания работы таймера
 			
-			if( tstatus <= 0 ) // таймер закончил отсчёт или ошибка
-			{
-				if ( tstatus < 0 )
-					in = uint8_array_delete ( in ); // ошибка таймера
-					
-				break;
-			}
+            if ( tstatus < 0 )
+            {
+                _in = uint8_array_delete ( _in ); // ошибка таймера
+                R = EE_TIMER;
+                break;
+            }
+            else
+            {
+                R = EE_SUCCESS;
+                break;
+            }
 		}
 	}
 
-	return in;
+    *in = _in
+
+	return R;
 }
 
 
