@@ -93,13 +93,13 @@ const char* get_short_opt_arg ( int *index, int argc, char **argv )
     if ( ( _i + 1 ) < argc &&
          get_optype ( argv[ _i + 1 ] ) == CLI_NO_OPT )
     {
-        printf ( "Есть аргумент для короткой опции: %s\n", argv[ _i + 1 ] );
         *index += 2;
         
         return argv[ _i + 1 ];
     }
     else
     {
+        *index += 1;
         return NULL;
     }
 }
@@ -111,49 +111,53 @@ const char* get_long_opt_arg ( const char *argv )
     const char *argument = strchr ( argv, '=' );
     
     if ( argument != NULL )
+    {
         return argument + 1;
+    }
     else
+    {
         return argument;
+    }
 }
 
 // проверка что опция последняя
 static
-int is_last_option ( cli_option_t Option )
+int is_last_option ( cli_option_t *Option )
 {
-    return Option.longname == NULL &&
-            Option.shortname == 0 &&
-            Option.has_arg == 0 &&
-            Option.handler == NULL &&
-            Option.outvar == NULL &&
-            Option.flag == NULL;
+    return Option->longname == NULL &&
+            Option->shortname == 0 &&
+            Option->has_arg == 0 &&
+            Option->handler == NULL &&
+            Option->outvar == NULL &&
+            Option->flag == NULL;
 }
 
 // проверка опции
 static
-int is_equal_option ( cli_option_t Opt, cli_option_type_t OType, const char *option )
+int is_equal_option ( cli_option_t *Opt, cli_option_type_t OType, const char *option )
 {
     if ( OType == CLI_SHORT_OPT )
     {
-        return Opt.shortname == option[ 1 ];
+        return Opt->shortname == option[ 1 ];
     }
     else
     {
         size_t len = cli_get_long_option_len ( option );
-        return !!( strncmp ( Opt.longname, option + 2, len ) );
+        return ( strncmp ( Opt->longname, option + 2, len ) ) ? 0 : 1;
     }
 }
 
 // поиск опции
 static
-cli_option_t* find_option ( cli_option_t *Opts, cli_option_type_t OType, const char *option )
+cli_option_t* find_option ( cli_option_t *Opt, cli_option_type_t OType, const char *option )
 {
     int i = 0;
     cli_option_t *Result = NULL;
     
-    while ( !is_last_option ( Opts[ i ] ) && Result == NULL )
+    while ( !is_last_option ( &Opt[ i ] ) && Result == NULL )
     {
-        if ( is_equal_option ( Opts[ i ], OType, option ) )
-            Result = Opts + i;
+        if ( is_equal_option ( &Opt[ i ], OType, option ) )
+            Result = Opt + i;
         
         i++;
     }
@@ -162,10 +166,8 @@ cli_option_t* find_option ( cli_option_t *Opts, cli_option_type_t OType, const c
 }
 
 static 
-cli_result_t eval_option ( cli_option_t *Opts, cli_option_type_t OType, const char *option, const char *argument )
-{
-    cli_option_t *Opt = find_option ( Opts, OType, option );
-    
+cli_result_t eval_option ( cli_option_t *Opt, cli_option_type_t OType, const char *option, const char *argument )
+{ 
     if ( Opt == NULL )
     {
         return CLI_ERROR_NF_OPT;
@@ -177,7 +179,7 @@ cli_result_t eval_option ( cli_option_t *Opts, cli_option_type_t OType, const ch
 
 // обработка опции CLI с обязательным аргументом
 static
-cli_result_t eval_option_rarg ( cli_option_t *Opts, cli_option_type_t OpType, int *i, int argc, char **argv )
+cli_result_t eval_option_rarg ( cli_option_t *Opt, cli_option_type_t OpType, int *i, int argc, char **argv )
 {
     int _i = *i;
     
@@ -186,23 +188,19 @@ cli_result_t eval_option_rarg ( cli_option_t *Opts, cli_option_type_t OpType, in
     
     if ( OpType == CLI_SHORT_OPT )
     {
-        printf ( "Короткая опция\n" );
         // разбор короткой опции
         argument = get_short_opt_arg ( i, argc, argv );
     }
     else
     {
-        printf ( "Длинная опция\n" );
         // разбор длинной опции
         argument = get_long_opt_arg ( argv[ _i ] );
         ( *i )++;
     }  
      
-    return ( argument != NULL ) ? eval_option ( Opts, OpType, option, argument ) 
+    return ( argument != NULL ) ? eval_option ( Opt, OpType, option, argument ) 
                                  : CLI_ERROR_NOARG;
 }
-
-
 
 // обработка опции CLI с опциональным аргументом
 static
@@ -216,13 +214,11 @@ cli_result_t eval_option_oarg ( cli_option_t *Option, cli_option_type_t OpType, 
     cli_result_t Result;
     if ( OpType == CLI_SHORT_OPT )
     {
-        printf ( "Короткая опция\n" );
         // разбор короткой опции
         argument = get_short_opt_arg ( i, argc, argv ); 
     }
     else
     {
-        printf ( "Длинная опция\n" );
         // разбор длинной опции
         argument = get_long_opt_arg ( argv[ _i ] );
         ( *i )++;
@@ -235,47 +231,44 @@ cli_result_t eval_option_oarg ( cli_option_t *Option, cli_option_type_t OpType, 
 
 // обработка опции CLI с отсутствующим аргументом
 static
-cli_result_t eval_option_noarg ( cli_option_t *Opts, cli_option_type_t OpType, const char *option )
+cli_result_t eval_option_noarg ( cli_option_t *Opt, cli_option_type_t OpType, const char *option )
 {
-    return eval_option ( Opts, OpType, option, NULL );
+    return eval_option ( Opt, OpType, option, NULL );
 }
 
 cli_result_t cli_parse ( cli_option_t *Option, int argc, char** argv )
 {
     cli_result_t Result = CLI_SUCCESS;
     int i = 1;
-    fputs ( "Старт разбора аргументов\n", stdout );
-    
+
     while ( ( i < argc ) && ( Result == CLI_SUCCESS ) )
     {
-        printf ( "Разбор: %d = %s\n", i, argv[ i ] );
         cli_option_type_t OpType = get_optype ( argv [ i ] );
         
         if ( OpType == CLI_NO_OPT )
         {
             Result = CLI_ERROR_OPTYPE;
         }
-        else switch ( Option[ i ].has_arg )
+        else 
         {
-            case CLI_REQUIRED_ARG: 
-                printf ( "Требуется аргумент\n" );
-                Result = eval_option_rarg ( Option, OpType, &i, argc, argv ); 
-                break;
-            case CLI_OPTIONAL_ARG: 
-                printf ( "Возможен аргумент\n" );
-                Result = eval_option_oarg ( Option, OpType, &i, argc, argv ); 
-                break;
-            case CLI_NO_ARG: 
-                printf ( "Не требуется аргумент\n" );
-                Result = eval_option_noarg ( Option, OpType, argv[ i ] );
-                i++;
-                break;
-            default: 
-                printf ( "Ошибка\n" );
-                Result = CLI_ERROR_ARG;
-                break;
+            cli_option_t *Opt = find_option ( Option, OpType, argv[ i ] );
+            switch ( Opt->has_arg )
+            {
+                case CLI_REQUIRED_ARG: 
+                    Result = eval_option_rarg ( Opt, OpType, &i, argc, argv ); 
+                    break;
+                case CLI_OPTIONAL_ARG: 
+                    Result = eval_option_oarg ( Opt, OpType, &i, argc, argv ); 
+                    break;
+                case CLI_NO_ARG: 
+                    Result = eval_option_noarg ( Opt, OpType, argv[ i ] );
+                    i++;
+                    break;
+                default: 
+                    Result = CLI_ERROR_ARG;
+                    break;
+            }
         }
-        
     }
     
     return Result;
@@ -349,8 +342,6 @@ int person_set_country ( void *ptr, int *flag, const char *arg )
 
 int main(int argc, char **argv)
 {
-    printf ( "%d\n", argc );
-    
     person_t SomeBody;
     
 	cli_option_t CliOpts[] = 
@@ -372,10 +363,10 @@ int main(int argc, char **argv)
     }
     
     printf ( "Person history:\n" );
-    printf ( "Name: %s", SomeBody.name );
-    printf ( "Age: %d", SomeBody.age );
-    printf ( "Sex: %s", ( SomeBody.sex ) ? "male" : "female" );
-    printf ( "Country: %s", SomeBody.country );
+    printf ( "Name: %s\n", SomeBody.name );
+    printf ( "Age: %d\n", SomeBody.age );
+    printf ( "Sex: %s\n", ( SomeBody.sex ) ? "male" : "female" );
+    printf ( "Country: %s\n", SomeBody.country );
     
 	return 0;
 }
