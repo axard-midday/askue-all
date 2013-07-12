@@ -9,8 +9,6 @@
 #include "askue_launcher_macro.h"
 #include "askue_launcher_log_error.h"
 
-static sqlite3* Askue_Launcher_DB;
-
 bool_t sqlite3_exec_decor ( sqlite3 *db, char *sql, int ( *callback ) ( void*, int, char **, char ** ), void *ptr )
 {
 	char *sqlite3_emsg = NULL;

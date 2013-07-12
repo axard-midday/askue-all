@@ -78,99 +78,61 @@ typedef enum _search_status_t
 	SEARCH_STATUS_ERROR = -1
 } search_status_t;
 
-typedef struct _profile_t
+typedef struct 
 {
-	uint16_t value [ 8 ];
-} profile_t;
-
-/*
- * открыть канал
- */
-bool_t open_chanel ( int RS232, uint8_t dev_name, long int timeout );
-
-/*
- * закрыть канал
- */
-bool_t close_chanel ( int RS232, uint8_t dev_name, long int timeout );
-
-bool_t sqlite3_transaction ( sqlite3 *SQLite3_DB, const char *sql );
-
-/*
- * генерация строки с датой на day_ago дней назад
- */
-const char *generate_date ( int day_ago );
-
-/*
- * задать вопрос о поиске
- */
-bool_t search_start ( int RS232, uint8_t dev_name, long int timeout, const char *datetime );
-
-// задать вопрос о статусе поиске
-// 0 - не найден
-// 1 в поиске
-// 2 найден
-// -1 ошибка
-search_status_t search_get_status ( int RS232, uint8_t dev_name, long int timeout, uint16_t *memory_addr );
-
-/*
- * Прочитать заданное число байт из памяти счётчика
- */
-bool_t cnt_read_mem ( int RS232, uint8_t dev_name, long int timeout, uint16_t mem_addr, uint8_t byte_amount, uint8_t *mem_content );
-
-/*
- * Вывод лога
- */
-bool_t __log_input ( const byte_array_t *input, void *ptr );
-
-/*
- * проверить контрольную сумму заголовка
- */
-bool_t valid_profile_checksum ( byte_array_t *header );
-
-/*
- * Для обратного вызова
- */
-int callback ( void *ptr, int amount, char **value, char**cols );
-
-/*
- * Прочитать профиль
- */
-bool_t get_profile ( int RS232, uint8_t dev_name, int timeout, const char *datetime, profile_t *profile );
-
-/*
- * Найти отсутствующие в базе срезы профилей
- */
-const char *get_lost_datetime ( sqlite3 *SQLite3_DB, uint32_t dev_name, const char *date, const char *max_time );
-
-/*
- * Сгенерировать максимальное время для данной даты
- */
-const char* generate_max_time ( int day_ago );
-
-/*
- * Сохранить профиль в базу
- */
-bool_t save_profile ( sqlite3 *SQLite3_db, uint32_t dev_name, const char *datetime, const profile_t *profile );
-
-/*
- * Загрузить профиль мощности со счётчика
- */
-bool_t download_profile ( int RS232, uint8_t dev, int timeout, const char *lost_datetime, sqlite3 *SQLite_db );
-
-/*
- *  Число получасий в дне
- */
-int halfhour_amount ( int day_ago );
+    uint16_t Address;
+    uint8_t SearchFlag;
+    char Header[ DATE_TIME_STRING_BUF + 1 ];
+    uint32_t Power[ 8 ];
+} power_profile_t;
 
 typedef struct
 {
-	sqlite3 *DB;		// --db={ПУТЬ}
-	int RS232_FD;		// --port="{ПУТЬ} {ФОРМУЛА КОНФИГА}"
-	FILE *Log;		// --log={ПУТЬ}
-	uint8_t Device;		// --device={НОМЕР УСТРОЙСТВА}
-	long int Timeout;	// --timeout={ТАЙМАУТ СОЕДИНЕНИЯ}
-	char DebugFlag;		// --debug 
+	sqlite3 *DB;		    // --db={ПУТЬ}
+	int RS232_FD;		    // --port="{ПУТЬ} {ФОРМУЛА КОНФИГА}"
+	FILE *Log;		        // --log={ПУТЬ}
+	uint8_t Device;	    // --device={НОМЕР УСТРОЙСТВА}
+	long int Timeout;	    // --timeout={ТАЙМАУТ СОЕДИНЕНИЯ}
+	uint8_t DebugFlag;		// --debug 
+    power_profile_t *PowerProfile;
 } script_cfg_t;
+
+// запись в лог
+static
+void __log_write ( FILE *F, const char *format, ... )
+{
+   	time_t t = time ( NULL );
+	char asctime_str[ DATE_TIME_STRING_BUF + 1 ];
+	int len = strftime ( asctime_str, DATE_TIME_STRING_BUF + 1, "%Y-%m-%d %H:%M:%S", localtime ( &t ) );
+
+	if ( len != DATE_TIME_STRING_BUF )
+	{
+		return;
+	}
+	
+	fprintf ( F, "%s ", asctime_str );
+
+    va_list vl;
+    va_start ( vl, format );
+    vfprintf ( F, format, vl );
+    va_end ( vl );
+}
+
+// обёртка для пишущих в базу запросов
+static
+bool_t sqlite3_transaction ( script_cfg_t *SCfg, const char *sql )
+{
+	char *sqlite3_emsg = NULL;
+	//выполнить запрос
+	if ( sqlite3_exec ( SCfg->DB, sql, NULL, NULL, &sqlite3_emsg ) != SQLITE_OK )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, sqlite3_emsg );
+		sqlite3_free ( sqlite3_emsg );
+		return FALSE;
+	}
+	else
+		return TRUE;
+}
 
 // настройка конфига
 static
@@ -178,13 +140,15 @@ void script_cfg_init ( script_cfg_t *SCfg )
 {
 	SCfg->DB = NULL;
 	SCfg->RS232_FD = -1;
+    /*
 	SCfg->Log = fopen ( ASKUE_LOG, "a" );
 
 	if ( SCfg->Log == NULL )
 	{
 		exit ( EXIT_FAILURE );
 	}
-	
+	*/
+    SCfg->Log = stdout;
 	SCfg->Device = 0;
 	SCfg->Timeout = 0;
 	SCfg->DebugFlag = 0;
@@ -212,13 +176,80 @@ int callback ( void *ptr, int amount, char **value, char**cols )
 	return sprintf ( ( char* ) ptr, "%s %s", value[ 1 ], value[ 0 ] ) < 0;
 } 
 
+#define SQL_CreateDateTbl \
+"CREATE TEMPORARY TABLE IF NOT EXISTS date_tbl ( date text );"
+#define SQL_CreateDateId \
+"CREATE TEMPORARY UNIQUE INDEX data_id ON date_tbl ( date );"
+#define SQL_InsertIntoDateTbl \
+"INSERT INTO date_tbl ( date ) VALUES ( ( SELECT DATE ( 'now', '-%d day' ) ) );"
+#define SQL_DropDateTbl \
+"DROP TABLE date_tbl"
+
+static 
+bool_t prepare_date_tbl ( script_cfg_t *SCfg )
+{
+	char *sqlite3_emsg = NULL;
+	if ( sqlite3_exec ( SCfg->DB, SQL_CreateDateTbl, NULL, NULL, &sqlite3_emsg ) != SQLITE_OK )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s в запросе:\n%s\n", SCRIPT_NAME, sqlite3_emsg, SQL_CreateDateTbl );					
+		sqlite3_free ( sqlite3_emsg );
+		return FALSE;
+	}
+	else if ( sqlite3_exec ( SCfg->DB, SQL_CreateDateId, NULL, NULL, &sqlite3_emsg ) != SQLITE_OK )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s в запросе:\n%s\n", SCRIPT_NAME, sqlite3_emsg, SQL_CreateDateId );					
+		sqlite3_free ( sqlite3_emsg );
+		return FALSE;
+	}
+	
+	if ( !sqlite3_transaction ( SCfg, "BEGIN TRANSACTION;" ) ) return FALSE;
+	
+	bool_t Result = TRUE;
+	for ( int i = 0; i < 32 && Result; i++ )
+	{
+		char *sql = sqlite3_mprintf ( SQL_InsertIntoDateTbl, i );
+		if ( sqlite3_exec ( SCfg->DB, sql, NULL, NULL, &sqlite3_emsg ) != SQLITE_OK )
+		{
+			__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s в запросе:\n%s\n", SCRIPT_NAME, sqlite3_emsg, sql );					
+			sqlite3_free ( sqlite3_emsg );
+			Result = FALSE;
+		}
+		sqlite3_free ( sql );
+	}
+	if ( !Result ) return FALSE;
+	
+	if ( !sqlite3_transaction ( SCfg, "END TRANSACTION;" ) ) return FALSE;
+	
+	return TRUE;
+}
+
+// удалить таблицу
+static
+bool_t drop_date_tbl ( script_cfg_t *SCfg )
+{
+	char *sqlite3_emsg = NULL;
+	if ( sqlite3_exec ( SCfg->DB, SQL_DropDateTbl, NULL, NULL, &sqlite3_emsg ) != SQLITE_OK )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s в запросе:\n%s\n", SCRIPT_NAME, sqlite3_emsg, SQL_DropDateTbl );					
+		sqlite3_free ( sqlite3_emsg );
+		return FALSE;
+	}
+	
+	return TRUE;
+}
+
 // поиск потеряных записей
 static
-int get_lost_datetime ( script_cfg_t *SCfg, char *LostDatetime )
+bool_t get_lost_datetime ( script_cfg_t *SCfg, char *LostDatetime )
 {
-	int Result = -1;
-	char *sql = sqlite3_mprintf ( SQL_FindLostRecord, SCfg->Device, SCfg->Device, SCfg->Device, SCfg->Device,
-							  SCfg->Device, SCfg->Device, SCfg->Device, SCfg->Device ); // формирование запроса
+	if ( !prepare_date_tbl ( SCfg ) ) return FALSE;
+
+	int Result = FALSE;
+    uint8_t Dev = SCfg->Device;
+    // формирование запроса
+	char *sql = sqlite3_mprintf ( SQL_FindLostRecord, 
+                                    Dev, Dev, Dev, Dev,
+                                    Dev, Dev, Dev, Dev ); 
 	
 	if ( sql != NULL )
 	{	
@@ -226,19 +257,25 @@ int get_lost_datetime ( script_cfg_t *SCfg, char *LostDatetime )
 		//выполнить запрос
 		if ( sqlite3_exec ( SCfg->DB, sql, callback, LostDatetime, &sqlite3_emsg ) != SQLITE_OK )
 		{
-			log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, sqlite3_emsg );					
+			__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, sqlite3_emsg );					
 			sqlite3_free ( sqlite3_emsg );
-
 		}
 		else if ( SCfg->DebugFlag )
 		{
-			log_write ( Log_File, "[ %s ]: Найден пропуск: %s\n", SCRIPT_NAME, LostDatetime );
-			Result = 0;
+			__log_write ( SCfg->Log, "[ %s ]: Найден пропуск: %s\n", SCRIPT_NAME, LostDatetime );
+			Result = TRUE;
 		}
 				    
 		sqlite3_free ( sql );	
+		
+		
 	}
+    else
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Ошибка: sqlite3_mprintf\n", SCRIPT_NAME );		
+    }
 	
+	drop_date_tbl ( SCfg );
 	return Result;
 }
 
@@ -246,7 +283,7 @@ int get_lost_datetime ( script_cfg_t *SCfg, char *LostDatetime )
 static
 bool_t IO_Terminal ( const byte_array_t *cmd, void *file )
 {
-	script_cfg_t *SCfg = ( script_cfg_t* )file;
+	script_cfg_t *SCfg = *( script_cfg_t** )file;
 	FILE *output = ( SCfg->DebugFlag ) ? stdout : SCfg->Log;
 	
 	time_t t = time ( NULL );
@@ -258,18 +295,93 @@ bool_t IO_Terminal ( const byte_array_t *cmd, void *file )
 		return FALSE;
 	}
 	
-	
 	fprintf ( output, "%s ", asctime_str );
 	if ( cmd != NULL )
 	{
-		for ( size_t i = 0; i < src->len; i++ )
-			fprintf ( output, "%x ", src->data[ i ] );
+		for ( size_t i = 0; i < cmd->len; i++ )
+			fprintf ( output, "%x ", cmd->data[ i ] );
 	}
 	fprintf ( output, "\n" );
 	fflush ( output );
 
 	return TRUE;
 }
+
+// callback разбирающий ответ счётчика
+static
+bool_t search_status_encode ( const byte_array_t *input, void *ptr )
+{
+    if ( !IO_Terminal ( input, ptr ) ) return FALSE;
+    
+    script_cfg_t *SCfg = *( script_cfg_t** )ptr;
+    power_profile_t *PP = SCfg->PowerProfile;
+    
+    bool_t Result = TRUE;
+    switch ( input -> data[ 1 ] )
+    {
+        case 0x00:
+            {
+                PP->SearchFlag = SEARCH_STATUS_YES;
+            
+                SET_BYTE ( PP->Address, 1, input -> data[ 4 ] );
+                SET_BYTE ( PP->Address, 0, input -> data[ 5 ] );
+            }	
+            break;		
+        case 0x01:
+            PP->SearchFlag = SEARCH_STATUS_IN_PROGRESS;
+            break;
+                    
+        case 0x02:
+            PP->SearchFlag = SEARCH_STATUS_NO;
+            break;
+                    
+        default:
+            Result = FALSE;
+            PP->SearchFlag = SEARCH_STATUS_ERROR;
+            break;
+    }
+    
+    return Result;
+}
+
+// задать вопрос о статусе поиске
+static
+bool_t search_get_status ( script_cfg_t *SCfg )
+{		
+	char *emsg = NULL;
+	uint8_t data[] = { SCfg->Device, 0x08, 0x18, 0x00 };
+	byte_array_t *cmd = byte_array_update_data ( NULL, data, 4 );
+	//контрольная сумма
+	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
+
+	if ( SCfg->DebugFlag )
+	{
+		IO_Terminal ( ( const byte_array_t* ) cmd, SCfg ); 
+	}
+
+	//выполнить команду
+    bool_t Result = execute ( SCfg->RS232_FD, cmd, SCfg->Timeout, CNT_TM_valid_func, search_status_encode, SCfg, &emsg );
+	if ( Result == FALSE )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
+	}
+    if ( emsg != NULL ) free ( emsg );
+	byte_array_delete ( cmd );
+	
+	return Result;
+}
+
+// ожидание ответа от счётчика по поиску профиля
+static
+bool_t search_end ( script_cfg_t *SCfg )
+{
+    bool_t Result;
+    do {
+        Result = search_get_status ( SCfg );
+    } while ( Result && SCfg->PowerProfile->SearchFlag == SEARCH_STATUS_IN_PROGRESS );
+    return Result;
+}
+
 // открыть канал
 static
 bool_t chanel_open ( script_cfg_t *SCfg )
@@ -281,13 +393,13 @@ bool_t chanel_open ( script_cfg_t *SCfg )
 
 	if ( SCfg->DebugFlag )
 	{
-		IO_Terminal ( cmd, SCfg ); 
+		IO_Terminal ( ( const byte_array_t* ) cmd, SCfg ); 
 	}
 		
-	bool_t result = execute ( SCfg->RS232_FD, cmd, SCfg->timeout, CNT_TM_valid_func, IO_Terminal, SCfg, &emsg );		
+	bool_t result = execute ( SCfg->RS232_FD, cmd, SCfg->Timeout, CNT_TM_valid_func, IO_Terminal, SCfg, &emsg );		
 	if ( result == FALSE )
 	{
-		log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
 	}
 	if ( emsg != NULL ) free ( emsg );
 	byte_array_delete ( cmd );
@@ -297,7 +409,7 @@ bool_t chanel_open ( script_cfg_t *SCfg )
 
 //закрыть канал
 static
-bool_t close_chanel ( script_cfg_t *SCfg )
+bool_t chanel_close ( script_cfg_t *SCfg )
 {	
 	char *emsg = NULL;
 	uint8_t data[] = { SCfg->Device, 0x02 };
@@ -312,7 +424,7 @@ bool_t close_chanel ( script_cfg_t *SCfg )
 	bool_t result = execute ( SCfg->RS232_FD, cmd, SCfg->Timeout, CNT_TM_valid_func, IO_Terminal, SCfg, &emsg );		
 	if ( result == FALSE )
 	{
-		log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, emsg );
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
 	}
 	if ( emsg != NULL ) free ( emsg );
 	byte_array_delete ( cmd );
@@ -338,15 +450,15 @@ byte_array_t *add_datetime ( byte_array_t *_cmd, const char *_datetime )
 		( uint8_t ) dec_to_bcd ( m ), ( uint8_t ) dec_to_bcd ( y ),
 		0xff, 0x1e
 	};
-	
 	return byte_array_append_data ( _cmd, data, 6 ); 		     
 }
 
 //задать вопрос о поиске
+static
 bool_t search_start ( script_cfg_t *SCfg, char *datetime )
 {
 	char *emsg = NULL;
-	uint8_t data[] = { dev_name, 0x03, 0x28, 0x00, 0x00, 0x00 };
+	uint8_t data[] = { SCfg->Device, 0x03, 0x28, 0x00, 0x00, 0x00 };
 	byte_array_t *cmd = byte_array_update_data ( NULL, data, 6 );
 	//контрольная сумма
 	cmd = append_checksum ( add_datetime ( cmd, datetime ), modbus_crc16, CNT_TM_checksum_order );
@@ -357,638 +469,423 @@ bool_t search_start ( script_cfg_t *SCfg, char *datetime )
 		IO_Terminal ( cmd, SCfg ); 
 	}
 		
-	bool_t result = execute ( RS232, cmd, timeout, CNT_TM_valid_func, IO_Terminal, SCfg, &emsg );
+	bool_t result = execute ( SCfg->RS232_FD, cmd, SCfg->Timeout, CNT_TM_valid_func, IO_Terminal, SCfg, &emsg );
 	//сообщение об ошибке
 	if ( result == FALSE )
 	{
-		log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
 	}
 	if ( emsg != NULL ) free ( emsg );
 	byte_array_delete ( cmd );
 	
 	return result;
-
-
-int download_profile ( script_cfg_t *SCfg, char *LostDatetime, tmPowerProfile_t *PowerProfile )
-{
-	uint32_t address = 0;
-	bool_t Result = chanel_open ( SCfg ) && 
-		        search_start ( SCfg, LostDatetime ) &&
-		        search_end ( SCfg, &address ) &&
-		        read_profile ( SCfg, &address, PowerProfile ) &&
-		        chanel_close ( SCfg );
-	return ( Result ) ? 0 : -1;
 }
+
+#define PROFILE_HEADER_LENGTH 8
+#define PROFILE_POWER_LENGTH 16
+
+//извлечь из фрейма запрощенные из памяти байты
+static
+bool_t extract_profile_power ( const byte_array_t *input, void *ptr )
+{
+    if ( !IO_Terminal ( input, ptr ) ) return FALSE;
+    power_profile_t *PowerProfile = ( *( script_cfg_t** )ptr )->PowerProfile;
+    
+    for ( int i = 0; i < 8; i++ )
+    {
+        // запись старшего бита без флага неполного профиля
+        SET_BYTE ( PowerProfile->Power[ i ], 1, ( input->data[ i * 2 ] & 0x7f ) );
+        SET_BYTE ( PowerProfile->Power[ i ], 0, input->data[ i * 2 + 2 ] );
+        
+        if ( PowerProfile->Power[ i ] == 0x7fff ) PowerProfile->Power[ i ] = 0;
+    }
+    
+    return TRUE;
+}
+
+// чтение памяти профилей
+// данные: значения мощностей P+, P-, Q+, Q-
+static
+bool_t read_profile_power ( script_cfg_t *SCfg )
+{
+	char *emsg = NULL;
+    uint16_t MemoryAddress = SCfg->PowerProfile->Address + PROFILE_HEADER_LENGTH + 1;
+	uint8_t data[] = { SCfg->Device, 0x06, 0x03, GET_BYTE ( MemoryAddress, 1 ), GET_BYTE ( MemoryAddress, 0 ), PROFILE_POWER_LENGTH };
+	byte_array_t *cmd = byte_array_update_data ( NULL, data, 6 );
+	//контрольная сумма
+	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
+
+	if ( SCfg->DebugFlag )
+	{
+		IO_Terminal ( cmd, SCfg ); 
+	}
+
+	//выполнить команду
+	bool_t Result = execute ( SCfg->RS232_FD, cmd, SCfg->Timeout, CNT_TM_valid_func, extract_profile_power, ( void* ) SCfg, &emsg );
+	if ( Result == FALSE )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );	
+	}
+	if ( emsg != NULL ) free ( emsg );
+	byte_array_delete ( cmd );
+	
+	return Result;
+}
+
+// проверить контрольную сумму заголовка
+static
+bool_t valid_profile_checksum ( const byte_array_t *header )
+{
+	// Контрольная сумма заголовка
+	byte_array_t *header_checksum = byte_array_update_data ( NULL, &( header -> data [ header -> len - 1 ] ), 1 );
+	// проверить контрольную сумму
+	bool_t result =  valid_checksum ( header -> data, header -> len - 1, header_checksum, simple_checksum, NULL );
+	byte_array_delete ( header_checksum );
+	return result;
+}
+
+// перевести заголовок в строку
+static
+bool_t header2str ( script_cfg_t *SCfg, const byte_array_t *input )
+{
+    #define HDR_HOUR input->data[ 1 ]
+    #define HDR_DAY input->data[ 2 ]
+    #define HDR_MONTH input->data[ 3 ]
+    #define HDR_YEAR input->data[ 4 ]
+    #define HDR_TEMPLATE "20%.2u-%.2u-%.2u %.2u:00:00"
+    #define HDR_LEN DATE_TIME_STRING_BUF + 1
+    
+    int len = snprintf ( SCfg->PowerProfile->Header, 
+                         HDR_LEN, HDR_TEMPLATE, HDR_YEAR, HDR_MONTH, HDR_DAY, HDR_HOUR );
+    if ( len < 0 )
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, strerror ( errno ) );
+        return FALSE;
+    }
+    else
+    {
+        return TRUE;
+    }
+    
+    #undef HDR_HOUR
+    #undef HDR_DAY
+    #undef HDR_MONTH
+    #undef HDR_YEAR
+    #undef HDR_TEMPLATE
+    #undef HDR_LEN
+}
+
+// извлечь из фрейма запрощенные из памяти байты
+static
+bool_t extract_profile_header ( const byte_array_t *input, void *ptr )
+{
+    if ( !IO_Terminal ( input, ptr ) ) return FALSE;
+    script_cfg_t *SCfg = *( script_cfg_t** )ptr;
+    
+    if ( !valid_profile_checksum ( input ) ) return FALSE;
+
+    return header2str ( SCfg, input );
+}
+
+// чтение памяти профилей
+// данные: заголовок
+static
+bool_t read_profile_header ( script_cfg_t *SCfg )
+{
+	char *emsg = NULL;
+    uint16_t MemoryAddress = SCfg->PowerProfile->Address;
+	uint8_t data[] = { SCfg->Device, 0x06, 0x03, GET_BYTE ( MemoryAddress, 1 ), GET_BYTE ( MemoryAddress, 0 ), PROFILE_HEADER_LENGTH };
+	byte_array_t *cmd = byte_array_update_data ( NULL, data, 6 );
+	//контрольная сумма
+	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
+
+	if ( SCfg->DebugFlag )
+	{
+		IO_Terminal ( cmd, SCfg ); 
+	}
+
+	//выполнить команду
+	bool_t Result = execute ( SCfg->RS232_FD, cmd, SCfg->Timeout, CNT_TM_valid_func, extract_profile_header, ( void* ) SCfg, &emsg );
+	if ( Result == FALSE )
+	{
+		__log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );	
+	}
+	if ( emsg != NULL ) free ( emsg );
+	byte_array_delete ( cmd );
+	
+	return Result;
+}
+
+// чтение профиля
+static
+bool_t read_profile ( script_cfg_t *SCfg, char *LostDatetime )
+{
+    search_status_t SearchStatus = SCfg->PowerProfile->SearchFlag;
+    if ( SearchStatus == SEARCH_STATUS_NO )
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Профиль не найден\n", SCRIPT_NAME );
+        return TRUE;
+    }
+    else if ( SearchStatus & SEARCH_STATUS_ERROR )
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Ошибка поиска профиля\n", SCRIPT_NAME );
+        return TRUE;
+    }
+    else
+    {
+        return read_profile_header ( SCfg ) &&
+                read_profile_power ( SCfg );
+    }
+}
+
+#undef PROFILE_HEADER_LENGTH
+#undef PROFILE_POWER_LENGTH
+
+// получить получасие
+void get_halfhour ( const char *src, int number, char *dest )
+{
+	bzero ( dest, TIME_STRING_BUF + 1 );
+	if ( number )
+	{
+		// второе получасие
+		strncpy ( dest, src + DATE_STRING_BUF + 1, TIME_STRING_BUF );
+		dest[ 3 ] = '3';	
+	}
+	else
+	{
+		// первое получасие
+		strncpy ( dest, src + DATE_STRING_BUF + 1, TIME_STRING_BUF );
+	}
+}
+
+// получить дату
+void get_date ( const char *src, char *dest )
+{
+	bzero ( dest, DATE_STRING_BUF + 1 );
+	strncpy ( dest, src, DATE_STRING_BUF );
+}
+
+// сохранить в базу
+static
+bool_t save_profile ( script_cfg_t *SCfg )
+{
+    if ( sqlite3_transaction ( SCfg, "BEGIN TRAHSACTION;" ) )
+    {
+        bool_t Result = TRUE;
+        
+        const char *energy_type [ 4 ] = { "p+", "p-", "q+", "q-" };
+        char Halfhour[ TIME_STRING_BUF ];
+        char Date[ DATE_STRING_BUF ];
+        char *emsg = NULL;
+        
+        for ( int i = 0; i < 8 && Result; i++ )
+        {
+            get_halfhour ( SCfg->PowerProfile->Header, ( i > 4 ), Halfhour );
+            get_date ( SCfg->PowerProfile->Header, Date );
+            Result = save ( SCfg->DB, SCfg->Device, SCfg->PowerProfile->Power[ i ], energy_type[ i/2 ], Date, Halfhour, &emsg );
+            
+            if ( Result == FALSE )
+            {
+                __log_write ( SCfg->Log, "[ %s ]: Ошибка: %s\n", SCRIPT_NAME, emsg );
+            }
+            if ( emsg != NULL ) free ( emsg );
+        }
+        
+        Result = sqlite3_transaction ( SCfg, "END TRAHSACTION;" );
+        
+        return Result;
+    }
+	else
+    {
+        return FALSE;
+    }
+}
+
+/*                  Обработчики опций командной строки                */
+
+// открыть базу
+int cli_handler_open_db ( void *ptr, int *flag, const char *arg )
+{    
+    script_cfg_t* SCfg = ( script_cfg_t* )ptr;
+    sqlite3 *db;
+    if ( sqlite3_open ( arg, &db ) != SQLITE_OK )
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Ошибка открытия базы данных: %s\n", SCRIPT_NAME, sqlite3_errmsg ( db ) );
+        sqlite3_close ( db );
+        return -1;
+    }
+    else
+    {
+        ( ( script_cfg_t* )SCfg )->DB = db;
+        return 0;
+    }
+}
+
+// открыть порт
+int cli_handler_open_port ( void *ptr, int *flag, const char *arg )
+{
+    char Buffer[ 512 ];
+    strcpy ( Buffer, arg );
+
+    script_cfg_t* SCfg = ( script_cfg_t* )ptr;
+    int RS232 = -1;
+    
+    char *RS232_Opts[ 5 ];
+    RS232_Opts[ 0 ] = Buffer;
+    
+    char *NextToken = NULL;
+    for ( int i = 1; i < 5; i++ )
+    {
+    	char *NextToken = strchr ( RS232_Opts[ i - 1 ], ';' );
+	    if ( NextToken == NULL ) 
+	    {
+	    	__log_write ( SCfg->Log, "[ %s ]: Ошибка разбора опции --port\n" )
+	    	return -1;
+	    }
+        
+        RS232_Opts[ i ] = NextToken + 1;
+        NextToken[ 0 ] = '\0';
+    }
+    
+    #define RS232_Path RS232_Opts[ 0 ]
+    #define RS232_Speed RS232_Opts[ 1 ]
+    #define RS232_DBits RS232_Opts[ 2 ]
+    #define RS232_Parity RS232_Opts[ 3 ]
+    #define RS232_SBits RS232_Opts[ 4 ]
+    
+    RS232 = rs232_open ( RS232_Path );
+    if ( RS232 < 0 )
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Ошибка открытия rs232: %s\n", 
+                    SCRIPT_NAME, strerror ( errno ) );
+        return -1;
+    }
+  
+    struct termios T;
+    if ( rs232_init ( RS232, &T ) )
+    {
+    	close ( RS232 );
+    	__log_write ( SCfg->Log, "[ %s ]: Ошибка инициализации порта rs232: %s\n", 
+                    SCRIPT_NAME, strerror ( errno ) );
+    	return -1;
+    }
+    
+    rs232_set_speed ( &T, RS232_Speed );
+    rs232_set_databits ( &T, RS232_DBits );
+    rs232_set_parity ( &T, RS232_Parity );
+    rs232_set_stopbits ( &T, RS232_SBits );
+    
+    if ( rs232_apply ( RS232, &T ) ) 
+    {
+    	close ( RS232 );
+    	__log_write ( SCfg->Log, "[ %s ]: Ошибка настройки порта rs232: %s\n", 
+                    SCRIPT_NAME, strerror ( errno ) );
+    	return -1;
+    }
+    
+    SCfg->RS232_FD = RS232;
+    
+    #undef RS232_Path
+    #undef RS232_Speed
+    #undef RS232_DBits
+    #undef RS232_Parity
+    #undef RS232_SBits
+    
+    return 0;
+}
+
+// открыть лог
+int cli_handler_open_log ( void *ptr, int *flag, const char *arg )
+{
+    script_cfg_t* SCfg = ( script_cfg_t* )ptr;
+    FILE *newLog = NULL;
+    newLog = fopen ( arg, "a" );
+    if ( newLog == NULL )
+    {
+        __log_write ( SCfg->Log, "[ %s ]: Ошибка открытия rs232: %s\n", 
+                    SCRIPT_NAME, strerror ( errno ) );
+        return -1;
+    }
+    else
+    {
+        fclose ( ( ( script_cfg_t* )SCfg )->Log );
+        ( ( script_cfg_t* )SCfg )->Log = newLog;
+        return 0;
+    }
+}
+
+// установить номер обрабатываемого устройства
+int cli_handler_set_device ( void *ptr, int *flag, const char *arg )
+{
+    long int liDevice;
+    liDevice = strtol ( arg, NULL, 10 );
+    ( *( uint8_t* )ptr ) = ( uint8_t )liDevice;
+    return 0;
+}
+
+// таймаут ожидания ответа
+int cli_handler_set_timeout ( void *ptr, int *flag, const char *arg )
+{
+    long int liTimeout;
+    liTimeout = strtol ( arg, NULL, 10 );
+    ( *( long int* )ptr ) = liTimeout;
+    return 0;
+}
+
+// установка флага отладки
+int cli_handler_set_debug ( void *ptr, int *flag, const char *arg )
+{
+    ( *( uint8_t* )ptr ) = 1;
+    return 0;
+}
+
+/*                          Точка входа скрипта                       */
 
 int main(int argc, char **argv)
 {
-	script_cfg_t ScriptCfg;
-	script_cfg_init ( &ScriptCfg );
+    // настройка конфигурации скрипта
+    power_profile_t PowerProfile;
+	script_cfg_t SCfg;
+	script_cfg_init ( &SCfg );
+    SCfg.PowerProfile = &PowerProfile;
 
+    // получение опций скрипта
 	cli_option_t CliOpts[] =
 	{
-		// ЗДЕСЬ ДОЛЖНЫ БЫТЬ ОПЦИИ
+        { "db", 'd', CLI_REQUIRED_ARG, cli_handler_open_db, &(SCfg), NULL },
+        { "port", 'p', CLI_REQUIRED_ARG, cli_handler_open_port, &(SCfg), NULL },
+        { "log", 'l', CLI_REQUIRED_ARG, cli_handler_open_log, &(SCfg), NULL },
+        { "device", 'n', CLI_REQUIRED_ARG, cli_handler_set_device, &(SCfg.Device), NULL },
+        { "timeout", 't', CLI_REQUIRED_ARG, cli_handler_set_timeout, &(SCfg.Timeout), NULL },
+        { "debug", 'v', CLI_REQUIRED_ARG, cli_handler_set_debug, &(SCfg.DebugFlag), NULL },
+        CLI_LAST_OPTION
 	};
 	cli_result_t CliResult = cli_parse ( CliOpts, argc, argv );
 	if ( CliResult != CLI_SUCCESS )
 	{
+        	script_cfg_destroy ( &SCfg );
 		exit ( EXIT_FAILURE );
 	}
 	
-	// ищем 12 пропусков
+	// ищем пропуск а затем работаем со счётчиком
+    int exit_status;
 	char LostDatetime[ DATE_TIME_STRING_BUF + 1 ];
-	int TmpResult = get_lost_datetime ( &ScriptCfg, LostDatetime );
-	if ( TmpResult != 0 )
-	{
-		script_cfg_destroy ( &ScriptCfg );
-		exit ( EXIT_FAILURE );
-	}
-	
-	tmPowerProfile_t PowerProfile;
-	tm_power_profile_init ( &PowerProfile );
-	
-	TmpResult = download_profile ( &ScriptCfg, LostDatetime, &PowerProfile );
-	if ( TmpResult != 0 )
-	{
-		script_cfg_destroy ( &ScriptCfg );
-		exit ( EXIT_FAILURE );
-	}
-	
-	TmpResult = cmp_profile ( LostDatetime, &PowerProfile );
-	if ( TmpResult != 0 )
-	{
-		script_cfg_destroy ( &ScriptCfg );
-		exit ( EXIT_FAILURE );
-	}
-	
-	TmpResult = save_profile ( &ScriptCfg, &PowerProfile );
-	if ( TmpResult != 0 )
-	{
-		script_cfg_destroy ( &ScriptCfg );
-		exit ( EXIT_FAILURE );
-	}
-	
-	script_cfg_destroy ( &ScriptCfg );
+	if ( get_lost_datetime ( &SCfg, LostDatetime ) &&
+         	chanel_open ( &SCfg ) && 
+		 search_start ( &SCfg, LostDatetime ) &&
+		 search_end ( &SCfg ) &&
+		 read_profile ( &SCfg, LostDatetime ) &&
+		 chanel_close ( &SCfg ) &&
+         	save_profile ( &SCfg ) )
+    {
+		exit_status = EXIT_FAILURE;
+    }
+    else
+    {
+        exit_status = EXIT_SUCCESS;
+    }
+    
+    script_cfg_destroy ( &SCfg );
 
-	return EXIT_SUCCESS;
+	return exit_status;
 }
-
-bool_t sqlite3_transaction ( sqlite3 *SQLite3_DB, const char *sql )
-{
-	char *sqlite3_emsg = NULL;
-
-	//выполнить запрос
-	if ( sqlite3_exec ( SQLite3_DB, sql, NULL, NULL, &sqlite3_emsg ) != SQLITE_OK )
-	{
-		log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, sqlite3_emsg );
-								
-		sqlite3_free ( sqlite3_emsg );
-		
-		return FALSE;
-	}
-	else
-		return TRUE;
-}
-
-int halfhour_amount ( int day_ago )
-{
-	if ( day_ago == 0 )
-	{
-		time_t t = time ( NULL );
-		
-		struct tm *stm_ptr = localtime ( &t );
-		
-		int x = ( stm_ptr -> tm_hour - 1 ) * 2;
-		
-		return ( x > 0 ) ? x : 
-		       ( x == 0 ) ? 2 : 0;
-	}
-	else
-		return 48;
-}
-
-bool_t download_profile ( int RS232, uint8_t dev, int timeout, const char *lost_datetime, sqlite3 *SQLite3_db )
-{
-	if ( lost_datetime != NULL )
-	{	
-		profile_t profile = { .value[ 0 ... 7 ] = 0 };
-		if ( get_profile ( RS232, dev, timeout, lost_datetime, &profile ) == TRUE )
-		{
-			return save_profile ( SQLite3_db, dev, lost_datetime, &profile );
-		}
-		else
-		{
-			return FALSE;
-		}
-	}
-	else
-		return TRUE; // пропусков нет - ищем дальше
-}
-
-
-//открыть канал
-bool_t open_chanel ( int RS232, uint8_t dev_name, long int timeout )
-{
-	char *emsg = NULL;
-	
-	byte_array_t *cmd = byte_array_update_data ( NULL, ( uint8_t [] ){ dev_name, 0x01, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30 }, 8 );
-	
-	//контрольная сумма
-	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
-
-	if ( Debug_Flag )
-		byte_array_fprintx ( stderr, cmd );
-		
-	bool_t result = execute ( RS232, cmd, timeout, CNT_TM_valid_func, __log_input, NULL, &emsg );
-			
-	if ( result == FALSE && emsg != NULL )
-	{
-		log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, emsg );
-		
-		free ( emsg );
-	}
-	
-	byte_array_delete ( cmd );
-	
-	return result;
-}
-
-//закрыть канал
-bool_t close_chanel ( int RS232, uint8_t dev_name, long int timeout )
-{	
-	char *emsg = NULL;
-	
-	byte_array_t *cmd = byte_array_update_data ( NULL, ( uint8_t [] ){ dev_name, 0x02 }, 2 );
-
-	//контрольная сумма
-	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
-	
-	if ( Debug_Flag )
-		byte_array_fprintx ( stderr, cmd );
-		
-	bool_t result = execute ( RS232, cmd, timeout, CNT_TM_valid_func, __log_input, NULL, &emsg );
-			
-	if ( result == FALSE && emsg != NULL )
-	{
-		log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, emsg );
-		
-		free ( emsg );
-	}
-	
-	byte_array_delete ( cmd );
-	
-	return result;
-}
-
-//задать вопрос о поиске
-bool_t search_start ( int RS232, uint8_t dev_name, long int timeout, const char *datetime )
-{
-	//добавить дату и время
-	byte_array_t *add_datetime ( byte_array_t *_cmd, const char *_datetime )
-	{
-		// msb ---> lsb
-		// час, день, месяц, год
-		uint32_t d = 0, m = 0, y = 0, h = 0; //день, месяц, год
-	
-		//смещение в дате чтобы захватить последние две цифры года
-		sscanf ( _datetime + 2, "%2u-%2u-%2u %2u", &y, &m, &d, &h ); 
-				    
-		//добавить к команде адрес профиля ( время его начала )
-		return byte_array_append_data ( _cmd, ( uint8_t [] ) { ( uint8_t ) dec_to_bcd ( h ), ( uint8_t ) dec_to_bcd ( d ), 
-								         ( uint8_t ) dec_to_bcd ( m ), ( uint8_t ) dec_to_bcd ( y ), 0xff, 0x1e }, 6 ); 		     
-	}
-
-
-	char *emsg = NULL;
-	
-	byte_array_t *cmd = byte_array_update_data ( NULL, ( uint8_t [] ){ dev_name, 0x03, 0x28, 0x00, 0x00, 0x00 }, 6 );
-
-	//контрольная сумма
-	cmd = append_checksum ( add_datetime ( cmd, datetime ), modbus_crc16, CNT_TM_checksum_order );
-
-	//выполнить команду
-	if ( Debug_Flag )
-		byte_array_fprintx ( stderr, cmd );
-		
-	bool_t result = execute ( RS232, cmd, timeout, CNT_TM_valid_func, __log_input, NULL, &emsg );
-
-	//сообщение об ошибке
-	if ( result == FALSE && emsg != NULL )
-	{
-		log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, emsg );
-		
-		free ( emsg );
-	}
-	
-	byte_array_delete ( cmd );
-	
-	return result;
-}
-
-
-// задать вопрос о статусе поиске
-// 0 - не найден
-// 1 в поиске
-// 2 найден
-// -1 ошибка
-search_status_t search_get_status ( int RS232, uint8_t dev_name, long int timeout, uint16_t *memory_addr )
-{
-	//контейнер содержащий статус выполнения и адрес в памяти счётчика
-	typedef struct _tmp_container_t
-	{
-		search_status_t search_status;
-		uint16_t mem_addr;
-	} tmp_container_t;
-	
-	//начальные настройки контейнера
-	tmp_container_t tmp_container = { .search_status = SEARCH_STATUS_ERROR, .mem_addr = 0x0000 };
-
-	// callback разбирающий ответ счётчика
-	bool_t search_status_encode ( const byte_array_t *input, void *ptr )
-	{
-		__log_input ( input, NULL );
-	
-		bool_t bool_result = TRUE; 
-		
-		tmp_container_t *_tmp_container_ = ( tmp_container_t* ) ptr;
-		
-		switch ( input -> data[ 1 ] )
-		{
-			case 0x00:
-				{
-					_tmp_container_ -> search_status = SEARCH_STATUS_YES;
-				
-					SET_BYTE ( _tmp_container_ -> mem_addr, 1, input -> data[ 4 ] );
-					SET_BYTE ( _tmp_container_ -> mem_addr, 0, input -> data[ 5 ] );
-				}	
-				break;		
-			case 0x01:
-				_tmp_container_ -> search_status = SEARCH_STATUS_IN_PROGRESS;
-				break;
-						
-			case 0x02:
-				_tmp_container_ -> search_status = SEARCH_STATUS_NO;
-				break;
-						
-			default:
-				bool_result = FALSE;
-				_tmp_container_ -> search_status = SEARCH_STATUS_ERROR;
-				break;
-		}
-		
-		return bool_result;
-	}
-		
-	char *emsg = NULL;
-	
-	byte_array_t *cmd = byte_array_update_data ( NULL, ( uint8_t [] ){ dev_name, 0x08, 0x18, 0x00 }, 4 );
-
-	//контрольная сумма
-	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
-
-	if ( Debug_Flag )
-		byte_array_fprintx ( stderr, cmd );
-
-	//выполнить команду
-	if ( execute ( RS232, cmd, timeout, CNT_TM_valid_func, search_status_encode, ( void* ) &tmp_container, &emsg ) == FALSE )
-	{
-		log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, emsg );
-		
-		if ( emsg != NULL ) free ( emsg );
-	}
-	else
-	{
-		( *memory_addr ) = tmp_container.mem_addr;
-	}
-	
-	byte_array_delete ( cmd );
-	
-	return tmp_container.search_status;
-}
-
-/*
- * Отладочный вывод
- */
-
-bool_t __log_input ( const byte_array_t *input, void *ptr )
-{
-	if ( Debug_Flag )
-		byte_array_fprintx ( stderr, input );
-		
-	return TRUE;
-}
-
-
-/*
- * Прочитать заданное число байт из памяти счётчика
- */
-bool_t cnt_read_mem ( int RS232, uint8_t dev_name, long int timeout, uint16_t mem_addr, uint8_t byte_amount, uint8_t *mem_content )
-{
-	//извлечь из фрейма запрощенные из памяти байты
-	bool_t get_mem_content ( const byte_array_t *input, void *ptr )
-	{
-		__log_input ( input, NULL );
-	
-		memcpy ( ptr, input -> data + 1, byte_amount );
-		
-		return TRUE;
-	}
-
-	char *emsg = NULL;
-	
-	byte_array_t *cmd = byte_array_update_data ( NULL, 
-						     ( uint8_t [] ){ dev_name, 0x06, 0x03, GET_BYTE ( mem_addr, 1 ), GET_BYTE ( mem_addr, 0 ), byte_amount }, 6 );
-
-	//контрольная сумма
-	cmd = append_checksum ( cmd, modbus_crc16, CNT_TM_checksum_order );
-
-	if ( Debug_Flag )
-		byte_array_fprintx ( stderr, cmd );
-
-	//выполнить команду
-	bool_t result = execute ( RS232, cmd, timeout, CNT_TM_valid_func, get_mem_content, ( void* ) mem_content, &emsg );
-	
-	if ( result == FALSE )
-	{
-		log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, emsg );
-		
-		if ( emsg != NULL ) free ( emsg );
-	}
-	
-	byte_array_delete ( cmd );
-	
-	return result;
-}
-
-/*
- * проверить контрольную сумму заголовка
- */
-bool_t valid_profile_checksum ( byte_array_t *header )
-{
-	// Контрольная сумма заголовка
-	byte_array_t *header_checksum = byte_array_update_data ( NULL, &( header -> data [ header -> len - 1 ] ), 1 );
-	
-	// проверить контрольную сумму
-	bool_t result =  valid_checksum ( header -> data, header -> len - 1, header_checksum, simple_checksum, NULL );
-
-	byte_array_delete ( header_checksum );
-
-	return result;
-}
-
-/*
- * Сохранить профиль в базу
- */
-bool_t save_profile ( sqlite3 *SQLite3_db, uint32_t dev_name, const char *datetime, const profile_t *profile )
-{
-	//типы полученных данных
-	const char *energy_type [ 4 ] =
-	{
-		"p+",
-		"p-",
-		"q+",
-		"q-"
-	};
-	
-	//извлечь дату 
-	const char* extract_date ( const char *_datetime )
-	{
-		static char buf[ DATE_STRING_BUF + 3 ];
-		
-		char subbuf[ DATE_STRING_BUF + 1 ] = { [ 0 ... DATE_STRING_BUF ] = '\0' };
-		
-		memcpy ( subbuf, _datetime, DATE_STRING_BUF );
-		
-		sprintf ( buf, "\'%s\'", subbuf );
-		
-		return ( const char* ) buf;
-	}
-	
-	//извлечь первое получасие
-	const char* extract_first_half_hour ( const char *_datetime )
-	{
-		static char buf[ TIME_STRING_BUF + 3 ];
-		
-		char subbuf[ TIME_STRING_BUF + 1 ] = { [ 0 ... TIME_STRING_BUF ] = '\0' };
-		
-		memcpy ( subbuf, _datetime + DATE_STRING_BUF + 1, TIME_STRING_BUF ); 
-		
-		subbuf[ 3 ] = subbuf[ 4 ] = '0';
-		
-		sprintf ( buf, "\'%s\'", subbuf );
-		
-		return ( const char* ) buf;
-	}
-	
-	//извлечь второе получасие
-	const char* extract_second_half_hour ( const char *_datetime )
-	{
-		static char buf[ TIME_STRING_BUF + 3 ];
-		
-		char subbuf[ TIME_STRING_BUF + 1 ] = { [ 0 ... TIME_STRING_BUF ] = '\0' };
-		
-		memcpy ( subbuf, _datetime + DATE_STRING_BUF + 1, TIME_STRING_BUF ); 
-		
-		subbuf[ 3 ] = '3';
-		subbuf[ 4 ] = '0';
-		
-		sprintf ( buf, "\'%s\'", subbuf );
-		
-		return ( const char* ) buf;
-	}
-	/* код save_profile */
-
-	bool_t result = FALSE;
-	
-	for ( int i = 0; i < 8; i++ )
-	{
-		char * error_msg = NULL;
-		
-		if ( ( result = save ( SQLite3_db, 
-				       dev_name, profile -> value[ i ], energy_type[ i % 4 ], 
-				       extract_date ( datetime ), 
-				       ( ( i < 4 ) ? extract_first_half_hour ( datetime ) : extract_second_half_hour ( datetime ) ), &error_msg ) ) == FALSE )
-		{
-			log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, error_msg );
-			
-			if ( error_msg != NULL )
-			{	
-				sqlite3_free ( error_msg );
-			}
-			
-			break;
-		}
-		
-	}
-	
-	return result;
-}
-
-/*
- * Сгенерировать даты на N дней назад
- */
-const char* generate_date ( int day_ago )
-{
-	static char _date[ DATE_STRING_BUF + 1 ];
-	
-	char *day_ago_str = NULL;
-	
-	asprintf ( &day_ago_str, "%d day", day_ago ); // строка смещения
-	
-	if ( day_ago_str != NULL )
-	{
-		sprintf_datetime ( _date, DATE_STRING_BUF + 1, "%Y-%m-%d", ( const char *[] ) { day_ago_str, NULL } ); // строка даты
-		
-		if ( Debug_Flag )
-			log_write ( Log_File, "[ %s ]: проверка даты: %s\n", PROGRAM_NAME, _date );
-		
-		return ( const char* ) _date;
-	}
-	else
-	{
-		return NULL;
-	}
-}
-
-/*
- * Сгенерировать максимальное время для данной даты
- */
-const char* generate_max_time ( int day_ago )
-{
-	static char _time[ TIME_STRING_BUF + 1 ];
-	
-	if ( day_ago == 0 )
-	{
-		sprintf_datetime ( _time, TIME_STRING_BUF + 1, "%H:%M:%S", ( const char *[] ) { "start of hour", NULL } );
-	}
-	else
-	{
-		sprintf ( _time, "23:59:59" );
-	}
-	
-	return _time;
-}
-
-/*
- * Найти отсутствующие в базе срезы профилей
- */
-const char *get_lost_datetime ( sqlite3 *SQLite3_DB, uint32_t dev_name, const char *date, const char *max_time )
-{
-	static char datetime[ DATE_STRING_BUF + TIME_STRING_BUF + 2 ] = 
-		{ [ 0 ... DATE_STRING_BUF + TIME_STRING_BUF + 1 ] = '\0' };
-	
-	char *sql = sqlite3_mprintf ( SELECT_TEMPLATE, date, dev_name, max_time ); // формирование запроса
-	
-	if ( sql != NULL )
-	{	
-		char *sqlite3_emsg = NULL;
-			
-		char _time[ TIME_STRING_BUF + 1 ] = { [ 0 ... TIME_STRING_BUF ] = '\0' };
-
-		//выполнить запрос
-		if ( sqlite3_exec ( SQLite3_DB, sql, callback, ( void* ) _time, &sqlite3_emsg ) != SQLITE_OK )
-		{
-			log_write ( Log_File, "[ %s ]: Ошибка: %s\n", PROGRAM_NAME, sqlite3_emsg );
-								
-			sqlite3_free ( sqlite3_emsg );
-		}
-		else
-		{
-			if ( _time[ 0 ] != '\0' )
-			{
-				sqlite3_free ( sql );	
-				
-				sprintf ( datetime, "%s %s", date, _time );
-				
-				if ( Debug_Flag )
-					log_write ( Log_File, "[ %s ]: Найден пропуск: %s\n", PROGRAM_NAME, datetime );
-				
-				return ( const char* ) datetime;
-			}
-		}
-				    
-		sqlite3_free ( sql );	
-	}
-	
-	return NULL;
-}
-
-/*
- * Колбек
- */
-int callback ( void *ptr, int amount, char **value, char**cols )
-{
-	return sprintf ( ( char* ) ptr, "%s", value[ 0 ] ) < 0;
-}
-
-/*
- * Прочитать профиль
- */
-bool_t get_profile ( int RS232, uint8_t dev_name, int timeout, const char *datetime, profile_t *profile )
-{	
-	bool_t result = FALSE;
-	
-	if ( search_start ( RS232, dev_name, timeout, datetime ) == TRUE ) //начать поиск заголовка
-	{
-		search_status_t status;
-		
-		uint16_t mem_addr = 0;
-		
-		//ждать пока найдётся
-		while ( ( status = search_get_status ( RS232, dev_name, timeout, &mem_addr ) ) == SEARCH_STATUS_IN_PROGRESS ); 
-			
-		if ( status == SEARCH_STATUS_YES ) //если найден
-		{
-			byte_array_t *hdr = byte_array_new ( 7 );
-				
-			//читать заголовок
-			if ( hdr != NULL && 
-			     ( cnt_read_mem ( RS232, dev_name, timeout, mem_addr, 7, hdr -> data ) == TRUE ) &&
-			     ( valid_profile_checksum ( hdr ) == TRUE ) ) 
-			{		
-				byte_array_t *raw_profile = byte_array_new ( 16 );
-					
-				//читать сам профиль
-				if ( raw_profile != NULL && 
-				     ( cnt_read_mem ( RS232, dev_name, timeout, mem_addr + 8, 16, raw_profile -> data ) == TRUE ) )
-				{
-					for ( int i = 0; i < 8; i++ )
-					{
-						// запись старшего бита без флага неполного профиля
-						SET_BYTE ( profile -> value[ i ], 1, ( raw_profile -> data[ i * 2 ] & 0x7f ) );
-						SET_BYTE ( profile -> value[ i ], 0, raw_profile -> data[ i * 2 + 1 ] );
-						
-						if ( profile->value[ i ] == 0x7fff )
-							profile->value[ i ] = 0;
-					}
-						
-					result = TRUE;
-				}
-					
-				byte_array_delete ( raw_profile );
-			}
-				
-			byte_array_delete ( hdr );
-		}
-		else if ( status == SEARCH_STATUS_NO )
-		{
-			for ( int i = 0; i < 8; i++ )
-			{
-				profile -> value[ i ] = 0;
-			}
-				
-			result = TRUE;
-		}
-	}
-	
-	return result;
-}
-
-
-
-
-
-
-
-
-
