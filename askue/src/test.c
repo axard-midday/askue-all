@@ -24,11 +24,23 @@
 
 #include <stdio.h>
 #include "config.h"
+#include "journal.h"
 #include "write_msg.h"
+#include "main_loop.h"
 
 int main(int argc, char **argv)
 {
 	write_msg ( stderr, "Test", "OK", "Hello, World!" );
+    
+    askue_cfg_t Cfg;
+    askue_config_init ( &Cfg );
+    askue_config_read ( &Cfg );
+    if ( askue_journal_init ( &Cfg ) )
+        write_msg ( stderr, "Test", "FAIL", "Journal Init!" );
+    else
+        write_msg ( stderr, "Test", "OK", "Journal Init!" );
+    askue_config_destroy ( &Cfg );
+    
 	return 0;
 }
 

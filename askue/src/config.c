@@ -34,8 +34,8 @@ void __init_log ( askue_cfg_t *ACfg )
 static
 void __init_db ( askue_cfg_t *ACfg )
 {
-    ACfg->DB = mymalloc ( sizeof ( db_cfg_t ) );
-    ACfg->DB->File = NULL;
+    ACfg->Journal = mymalloc ( sizeof ( journal_cfg_t ) );
+    ACfg->Journal->File = NULL;
 }
 
 // Инициализация списка устройств
@@ -96,8 +96,8 @@ void __destroy_log ( askue_cfg_t *ACfg )
 static
 void __destroy_db ( askue_cfg_t *ACfg )
 {
-    myfree ( ACfg->DB->File );
-    myfree ( ACfg->DB );
+    myfree ( ACfg->Journal->File );
+    myfree ( ACfg->Journal );
 }
 
 // Удаление данных о списке устройств
@@ -242,22 +242,46 @@ int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
 static
 int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
 {
-     config_setting_t *setting = config_lookup ( cfg, "DB" ); // поиск сети
+     config_setting_t *setting = config_lookup ( cfg, "Journal" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'BD'" );
+         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'Journal'" );
          return -1;
      }
      
-     const char *DBFile;
-     if ( config_setting_lookup_string ( setting, "file", &(DBFile) ) != CONFIG_TRUE )
+     const char *JnlFile;
+     if ( config_setting_lookup_string ( setting, "file", &(JnlFile) ) != CONFIG_TRUE )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'BD' не полная" );
+         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'Journal' не полная" );
          return -1;
      }
      
-     ACfg->DB = mymalloc ( sizeof ( db_cfg_t ) );
-     ACfg->DB->File = mystrdup ( DBFile );
+     const char *JnlSize;
+     if ( config_setting_lookup_string ( setting, "size", &(JnlSize) ) != CONFIG_TRUE )
+     {
+         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Отсутствует запись 'Journal.size'" );
+         write_msg ( stderr, "Чтение конфигурации", "OK", "Установка значения по умолчанию 'Journal.size = 3'" );
+         ACfg->Journal->Size = 3;
+     }
+     else
+     {
+         ACfg->Journal->Size = (size_t) strtol ( JnlSize, NULL, 10 );
+     }
+     
+     const char *JnlFlashback;
+     if ( config_setting_lookup_string ( setting, "flashback", &(JnlFlashback) ) != CONFIG_TRUE )
+     {
+         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Отсутствует запись 'Journal.flashback'" );
+         write_msg ( stderr, "Чтение конфигурации", "OK", "Установка значения по умолчанию 'Journal.flashback = 0'" );
+         ACfg->Journal->Flashback = 0;
+     }
+     else
+     {
+         ACfg->Journal->Flashback = (size_t) strtol ( JnlFlashback, NULL, 10 );
+     }
+     
+     ACfg->Journal = mymalloc ( sizeof ( journal_cfg_t ) );
+     ACfg->Journal->File = mystrdup ( JnlFile );
      
      return 0;
 }
@@ -318,6 +342,7 @@ int __config_read_counter ( config_setting_t *setting, askue_cfg_t *ACfg, size_t
         return -1;
     }
     
+    ACfg->DeviceList[ Number ]->Class = Askue_Counter;
     ACfg->DeviceList[ Number ]->Timeout = strtol ( CounterTimeout, NULL, 10 );
     
     return 0;
@@ -335,7 +360,8 @@ int __config_read_modem ( config_setting_t *setting, askue_cfg_t *ACfg, size_t N
     
     if ( !strcmp ( ModemSegment, "remote" ) )
     {
-         ACfg->DeviceList[ Number ]->Timeout = 0;
+        ACfg->DeviceList[ Number ]->Timeout = 0;
+        ACfg->DeviceList[ Number ]->Class = Askue_Modem;
         return 0;
     }
     else if ( !strcmp ( ModemSegment, "local" ) )
@@ -346,6 +372,7 @@ int __config_read_modem ( config_setting_t *setting, askue_cfg_t *ACfg, size_t N
             return -1;
         }
         
+        ACfg->DeviceList[ Number ]->Class = Askue_Modem;
         ACfg->DeviceList[ Number ]->Timeout = strtol ( ModemTimeout, NULL, 10 );
         
         return 0;

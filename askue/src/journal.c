@@ -1,5 +1,9 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <sqlite3.h>
 
+#include "write_msg.h"
+#include "config.h"
 
 
 
@@ -17,7 +21,7 @@ int sqlite3_exec_simple_decore ( sqlite3 *DB, const char *Request )
         write_msg ( stderr, "-||-", "FAIL", "В запросе:" );
         write_msg ( stderr, "-||-", "FAIL", Request );
         
-        sqlite3_free ( ErrorStr ):
+        sqlite3_free ( ErrorStr );
         
         return -1;
     }
@@ -37,14 +41,28 @@ int __init_tbl ( sqlite3 *DB, const char *TblReq, const char *IdReq, __init_func
     
     if ( init_func != NULL )
     {
-        return !( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
-                   !sqlite3_exec_simple_decore ( DB, IdReq ) &&
-                   !init_func ( DB, init_arg ) );
+        if ( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
+             !sqlite3_exec_simple_decore ( DB, IdReq ) &&
+             !init_func ( DB, init_arg ) )
+        {
+            return 0;
+        }
+        else
+        {
+            return -1;
+        }
     }
     else
     {
-        return !( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
-                   !sqlite3_exec_simple_decore ( DB, IdReq ) );
+        if ( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
+             !sqlite3_exec_simple_decore ( DB, IdReq ) )
+        {
+            return 0;
+        }
+        else
+        {
+            return -1;
+        }
     }
 }
 
@@ -54,6 +72,7 @@ int __init_tbl ( sqlite3 *DB, const char *TblReq, const char *IdReq, __init_func
 "DELETE FROM log_tbl WHERE date < ( SELECT DATE ( 'NOW', '-%u day' ) );"
 
 // настройка таблицы лога
+static
 int init_log_tbl ( sqlite3 *DB, void *arg )
 {
     askue_cfg_t *ACfg = ( askue_cfg_t* ) arg;
@@ -76,7 +95,7 @@ int init_log_tbl ( sqlite3 *DB, void *arg )
     Sql = sqlite3_mprintf ( SQL_INS_LOG_TBL, Msg );
     if ( Sql != NULL )
     {
-        ExecStatus = sqlite3_exec_simple_decore ( DB, Sql )
+        ExecStatus = sqlite3_exec_simple_decore ( DB, Sql );
         sqlite3_free ( Sql );
     }
     else
@@ -92,28 +111,41 @@ int init_log_tbl ( sqlite3 *DB, void *arg )
 
 
 #define SQL_INS_CNT_TBL \
-"INSERT INTO cnt_tbl ( cnt, type ) VALUES ( cnt text, type text );"
+"INSERT INTO cnt_tbl ( cnt, type ) VALUES ( %u, '%s' );"
 // настройка таблицы счётчиков
+static
 int init_cnt_tbl ( sqlite3 *DB, void *arg )
 {
     askue_cfg_t *ACfg = ( askue_cfg_t* ) arg;
     device_cfg_t **Device = ACfg->DeviceList;
     
-    int Result = 0;
-    for ( int i = 0; Device[ i ] != NULL && !Result; i++ )
+    if ( !sqlite3_exec_simple_decore ( DB, "BEGIN TRANSACTION;" ) )
     {
-        char *Sql = sqlite3_mprintf ( SQL_INS_CNT_TBL, Device->Id, Device->Type->Name );
-        if ( Sql == NULL )
+        int Result = 0;
+        for ( int i = 0; Device[ i ] != NULL && !Result; i++ )
         {
-            Result = -1;
+            if ( Device[ i ]->Class == Askue_Counter )
+            {
+                char *Sql = sqlite3_mprintf ( SQL_INS_CNT_TBL, (size_t) strtol ( Device[ i ]->Id, NULL, 10 ), Device[ i ]->Type->Name );
+                if ( Sql == NULL )
+                {
+                    Result = -1;
+                }
+                else
+                {
+                    Result = sqlite3_exec_simple_decore ( DB, Sql );
+                }
+            }
         }
-        else
-        {
-            Result = sqlite3_exec_simple_decore ( DB, Sql );
-        }
+        
+        Result = sqlite3_exec_simple_decore ( DB, "END TRANSACTION;" );
+        
+        return Result;
     }
-    
-    return Result;
+    else
+    {
+        return -1;
+    }
 }
 #undef SQL_INS_CNT_TBL
 
@@ -133,7 +165,7 @@ int init_cnt_tbl ( sqlite3 *DB, void *arg )
 // индекс таблицы показаний
 #define SQL_CRT_REG_ID "CREATE UNIQUE INDEX IF NOT EXISTS reg_id ON reg_tbl ( cnt, type, date, time );"
 // индекс таблицы счётчиков
-#define SQL_CRT_CNT_ID "CREATE UNIQUE INDEX IF NOT EXISTS cnt_id ON cnt_tbl ( cnt, modem, type );"
+#define SQL_CRT_CNT_ID "CREATE UNIQUE INDEX IF NOT EXISTS cnt_id ON cnt_tbl ( cnt, type );"
 // индекс для таблица лога событий
 #define SQL_CRT_LOG_ID "CREATE UNIQUE INDEX IF NOT EXISTS log_id ON log_tbl ( date, time, msg );"
 
@@ -141,7 +173,7 @@ int init_cnt_tbl ( sqlite3 *DB, void *arg )
 int askue_journal_init ( askue_cfg_t *ACfg )
 {
     sqlite3 *DB;
-    if ( sqlite3_open ( ACfg->DB->File, &DB ) != SQLITE_OK )
+    if ( sqlite3_open ( ACfg->Journal->File, &DB ) != SQLITE_OK )
     {
         char Buffer[ 256 ];
         snprintf ( Buffer, 256, "%s", sqlite3_errmsg ( DB ) );
@@ -154,11 +186,11 @@ int askue_journal_init ( askue_cfg_t *ACfg )
          !__init_tbl ( DB, SQL_CRT_LOG_TBL, SQL_CRT_LOG_ID, init_log_tbl, ACfg ) &&
          !__init_tbl ( DB, SQL_CRT_CNT_TBL, SQL_CRT_CNT_ID, init_cnt_tbl, ACfg ) )
     {
-        write_msg ( stderr, "Инициализация Базы", "FAIL", "Аварийное завершение" );
+        write_msg ( stderr, "Инициализация Базы", "OK", "Успешно созданы таблицы 'reg_tbl', 'cnt_tbl', 'log_tbl'" );
     }
     else
     {
-        write_msg ( stderr, "Инициализация Базы", "OK", "Успешно созданы таблицы 'reg_tbl', 'cnt_tbl', 'log_tbl'" );
+        write_msg ( stderr, "Инициализация Базы", "FAIL", "Аварийное завершение" );
     }
     
     sqlite3_close ( DB );

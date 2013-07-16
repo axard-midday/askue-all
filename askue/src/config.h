@@ -36,7 +36,9 @@ typedef struct
 typedef struct 
 {
     char *File;
-} db_cfg_t;
+    size_t Size;
+    size_t Flashback;
+} journal_cfg_t;
 
 typedef struct
 {
@@ -48,6 +50,7 @@ typedef struct
 {
     char *Id;
     long int Timeout;
+    device_class_t Class;
     type_cfg_t *Type;
 } device_cfg_t;
 
@@ -60,7 +63,7 @@ typedef struct
 {
     port_cfg_t *Port;
     log_cfg_t *Log;
-    db_cfg_t *DB;
+    journal_cfg_t *Journal;
     device_cfg_t **DeviceList;
     type_cfg_t **TypeList;
     report_cfg_t **ReportList;
