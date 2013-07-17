@@ -27,6 +27,7 @@ void __init_log ( askue_cfg_t *ACfg )
 {
     ACfg->Log = mymalloc ( sizeof ( log_cfg_t ) );
     ACfg->Log->File = NULL;
+    ACfg->Log->Mode = NULL;
     ACfg->Log->Lines = 0;
 }
 
@@ -89,6 +90,7 @@ static
 void __destroy_log ( askue_cfg_t *ACfg )
 {
     myfree ( ACfg->Log->File );
+    myfree ( ACfg->Log->Mode );
     myfree ( ACfg->Log );
 }
 
@@ -224,8 +226,10 @@ int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
     
      const char *LogFile;
      const char *LogLines;
+     const char *LogMode;
      if ( !( config_setting_lookup_string ( setting, "file", &(LogFile) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( setting, "lines", &(LogLines) ) == CONFIG_TRUE ) )
+             config_setting_lookup_string ( setting, "lines", &(LogLines) ) == CONFIG_TRUE &&
+             config_setting_lookup_string ( setting, "mode", &(LogMode) ) == CONFIG_TRUE ) )
      {
          write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'Log' не полная" );
          return -1;
@@ -234,6 +238,7 @@ int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
      ACfg->Log = mymalloc ( sizeof ( log_cfg_t ) );
      ACfg->Log->File = mystrdup ( LogFile );
      ACfg->Log->Lines = strtol ( LogLines, NULL, 10 );
+     ACfg->Log->Mode = mystrdup ( LogMode );
      
      return 0;
 }

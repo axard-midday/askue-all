@@ -15,7 +15,9 @@ static
 int sqlite3_exec_simple_decore ( sqlite3 *DB, const char *Request )
 {
     char *ErrorStr;
-    if ( sqlite3_exec ( DB, Request, NULL, NULL, &ErrorStr ) != SQLITE_OK )
+    int st = sqlite3_exec ( DB, Request, NULL, NULL, &ErrorStr );
+    
+    if ( st != SQLITE_OK && st != SQLITE_CONSTRAINT )
     {
         write_msg ( stderr, "Запрос к Базе", "FAIL", ErrorStr );
         write_msg ( stderr, "-||-", "FAIL", "В запросе:" );

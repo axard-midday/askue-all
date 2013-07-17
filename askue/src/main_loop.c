@@ -163,44 +163,59 @@ int run_inquiry ( const char **ScriptNamev, const script_argument_t *ScriptArgv,
     return Result;
 }
 
+// запись аргументов
+void script_arg_init ( script_argument_t *SA )
+{
+    SA[ SCRIPT_ARGUMENT_PORT_FILE ].Arg = ""
+}
+
+static 
+const char *ScriptArgument [] =
+{
+    "port_file", "port_parity", "port_dbits", "port_sbits", "port_speed",
+    "device",
+    "timeout",
+    "parametr",
+    "journal_file", "journal_flashback",
+    "log_file",
+    "debug_terminal", "debug_event", "debug_protocol"
+    NULL
+};
+
+typedef struct _cli_argument_t
+{
+    char *Name;
+    char *Value;
+    struct _cli_argument_t *Next;
+} cli_argument_t;
+
+// получить базовый модем
+static
+device_cfg_t* __get_base_modem ( device_cfg_t **DeviceList )
+{
+    return ( DeviceList[ 0 ]->Class == Askue_Modem ) ? DeviceList[ 0 ] : NULL;
+}
 
 // основной цикл программы
-int main_loop ( const askue_cfg_t *ACfg )
+int main_loop ( FILE *Log, const askue_cfg_t *ACfg )
 {
     device_cfg_t **DeviceList = ACfg->DeviceList;
-    device_cfg_t *BaseModem = NULL;
+    device_cfg_t *BaseModem = __get_base_modem ( DeviceList );
     
-    script_argument_t ScriptArg[] =
-    {
-        { "port_file", NULL },
-        { "port_parity", NULL },
-        { "port_dbits", NULL },
-        { "port_sbits", NULL },
-        { "port_speed", NULL },
-        { "device", NULL },
-        { "parametr", NULL },
-        { "timeout", NULL },
-        { "journal_file", NULL },
-        { "journal_flashback", NULL },
-        SCRIPT_ARGUMENT_END
-    };
+    cli_argument_t *CliArgument;
     
-    FILE *pLog = fopen ( ACfg->Log->File, "a" );
-    if ( pLog == NULL )
-    {
-        return -1;
-    }
+    script_argument_init ( CliArgument, ACfg );
     
+    size_t DeviceIndex = 0, ScriptIndex = 0;
     
-    script_argument_init ( ScriptArg, ACfg );
+    while ( !Signal &&
+             !inquire_device ( DeviceList[ DeviceIndex ], ScriptIndex, &Signal ) &&
+             !Signal &&
+             !askue_log_cut ( &Log, ACfg ) &&
+             !Signal &&
+             !next_device ( DeviceList, &ScriptIndex, &DeviceIndex ) );
     
-    if ( DeviceList[ 0 ]->Class == Askue_Modem )
-    {
-        BaseModem = DeviceList[ 0 ]
-    }
-    
-    int IsSuccess = 0;
-    while ( !IsSuccess ) 
+    /*
         for ( size_t i = ( ( BaseModem) ? 1 : 0 ); DeviceList[ i ] != NULL && !IsSuccess; i++ )
         {
             ScriptArg[ SCRIPT_ARGUMENT_DEVICE ] = DeviceList[ i ]->Id;
@@ -227,4 +242,5 @@ int main_loop ( const askue_cfg_t *ACfg )
                 IsSuccess = run_inquiry ( DeviceList[ i ]->Type->Script, ScriptArg, pLog );
             }
         }
+    */
 }

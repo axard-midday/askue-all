@@ -30,6 +30,7 @@ typedef struct
 typedef struct
 {
     char *File;
+    char *Mode;
     size_t Lines;
 } log_cfg_t;
 

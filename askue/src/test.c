@@ -25,8 +25,8 @@
 #include <stdio.h>
 #include "config.h"
 #include "journal.h"
+#include "log.h"
 #include "write_msg.h"
-#include "main_loop.h"
 
 int main(int argc, char **argv)
 {
@@ -34,11 +34,34 @@ int main(int argc, char **argv)
     
     askue_cfg_t Cfg;
     askue_config_init ( &Cfg );
-    askue_config_read ( &Cfg );
-    if ( askue_journal_init ( &Cfg ) )
-        write_msg ( stderr, "Test", "FAIL", "Journal Init!" );
-    else
-        write_msg ( stderr, "Test", "OK", "Journal Init!" );
+    if ( !askue_config_read ( &Cfg ) )
+    {
+        if ( askue_journal_init ( &Cfg ) )
+            write_msg ( stderr, "Test", "FAIL", "Journal not Init!" );
+        else
+        {
+            write_msg ( stderr, "Test", "OK", "Journal Init!" );
+            FILE *Log = NULL;
+            
+            if ( !askue_log_open ( &Log, &Cfg ) )
+            {
+                write_msg ( stderr, "Test", "OK", "Log open!" );
+                for ( int i = 1; i < 15; i++ )
+                {
+                    char Buffer[ 256 ];
+                    snprintf ( Buffer, 256, "%.2d", i );
+                    write_msg ( Log, "Test", "OK", Buffer );
+                }
+                
+                askue_log_cut ( &Log, &Cfg );
+                
+                write_msg ( Log, "Test", "OK", "После обрезания" );
+            }
+            
+            askue_log_close ( &Log );
+            write_msg ( stderr, "Test", "OK", "Log close!" );
+        }
+    }
     askue_config_destroy ( &Cfg );
     
 	return 0;
