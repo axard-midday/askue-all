@@ -18,6 +18,13 @@ typedef enum
     Askue_Modem
 } device_class_t;
 
+typedef enum
+{
+    Askue_NoSegment,
+    Askue_Remote,
+    Askue_Local
+} device_segment_t;
+
 typedef struct
 {
     char *File;
@@ -49,9 +56,11 @@ typedef struct
 
 typedef struct
 {
-    char *Id;
+    char *Name;
+    long int Id;
     long int Timeout;
     device_class_t Class;
+    device_segment_t Segment;
     type_cfg_t *Type;
 } device_cfg_t;
 
@@ -62,9 +71,16 @@ typedef struct
 
 typedef struct
 {
+    long int Id;
+    device_cfg_t *Device;
+} gate_cfg_t;
+
+typedef struct
+{
     port_cfg_t *Port;
     log_cfg_t *Log;
     journal_cfg_t *Journal;
+    gate_cfg_t **GateList;
     device_cfg_t **DeviceList;
     type_cfg_t **TypeList;
     report_cfg_t **ReportList;

@@ -19,6 +19,9 @@ typedef struct
 #define SA_TIMEOUT 7
 #define SA_JOURNAL_FILE 8
 #define SA_JOURNAL_FLASHBACK 9
+#define SA_LOG_FILE 10
+
+#define SA_AMOUNT 11
 
 // основной цикл программы
 void main_loop ( const askue_cfg_t *ACfg );

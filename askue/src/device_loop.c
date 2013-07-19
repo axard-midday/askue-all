@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,35 +12,14 @@
 #include "config.h"
 #include "main_loop.h"
 #include "write_msg.h"
-
-
-typedef enum 
-{
-    LoopOk,
-    LoopError,
-    LoopReconfig,
-    LoopExit,
-    LoopContinue
-} loop_state_t;
-
-
-
-#define SA_PORT_FILE 0
-#define SA_PORT_PARITY 1
-#define SA_PORT_DBITS 2
-#define SA_PORT_SBITS 3
-#define SA_PORT_SPEED 4
-#define SA_DEVICE 5
-#define SA_PARAMETR 6
-#define SA_TIMEOUT 7
-#define SA_JOURNAL_FILE 8
-#define SA_JOURNAL_FLASHBACK 9
-#define SA_LOG_FILE 10
-
+#include "script_option.h"
+#include "device_loop.h"
+#include "macro.h"
+#include "log.h"
 
 // Выполнение скрипта
 static
-void __exec_script ( FILE *Log, const char *ScriptName, char **Argv, const script_option_t *ScriptOptions )
+void __exec_script ( FILE *Log, const char *ScriptName, const script_option_t *ScriptOptions )
 {
     const char *Argv[ SA_AMOUNT + 1 ];
     
@@ -47,16 +28,16 @@ void __exec_script ( FILE *Log, const char *ScriptName, char **Argv, const scrip
     
     int j = 0;
     for ( int i = SA_PORT_FILE; i < SA_AMOUNT; i++ )
-        if ( TESTBIT ( ScriptOptions.Flag, i ) )
+        if ( TESTBIT ( ScriptOptions->Flag, i ) )
         {
-            Argv[ j ] = ( const char* ) ScriptOption->Value[ i ];
+            Argv[ j ] = ( const char* ) ScriptOptions->Value[ i ];
             j++;
         }
     
     // fclose ( Log )
     askue_log_close ( &Log );
 
-    if ( execvp ( ScriptName, ( char * const [] ) Argv ) )
+    if ( execvp ( ScriptName, ( char * const * ) Argv ) )
     {
         exit ( EXIT_FAILURE );
     }
@@ -73,13 +54,13 @@ loop_state_t __wait_script_result ( FILE *Log, pid_t pid, const char *ScriptName
     if ( WaitpidReturn == -1 )
     {
         snprintf ( Buffer, 256, "wait(): %s (%d)", strerror ( errno ), errno );
-        write_msg ( pLog, "Опрос", "FAIL", Buffer );
+        write_msg ( Log, "Опрос", "FAIL", Buffer );
         
         return LoopError;
     }
     else if ( WaitpidReturn == 0 )
     {
-        write_msg ( pLog, "Опрос", "FAIL", "Ложный сигнал SIGCHLD" );
+        write_msg ( Log, "Опрос", "FAIL", "Ложный сигнал SIGCHLD" );
         return LoopError;
     }
     
@@ -89,7 +70,7 @@ loop_state_t __wait_script_result ( FILE *Log, pid_t pid, const char *ScriptName
         if ( code != EXIT_SUCCESS )
         {
             if ( snprintf ( Buffer, 256, "Скрипт '%s' завершён с кодом: %d", ScriptName, code ) > 0 ) 
-                write_msg ( pLog, "Опрос", "FAIL", Buffer );
+                write_msg ( Log, "Опрос", "FAIL", Buffer );
             else
                 return LoopError;
         }
@@ -98,7 +79,7 @@ loop_state_t __wait_script_result ( FILE *Log, pid_t pid, const char *ScriptName
     {
         int sig = WTERMSIG ( status );
         if ( snprintf ( Buffer, 256, "Скрипт '%s' завершён по сигналу: %d", ScriptName, sig ) > 0 )
-            write_msg ( pLog, "Опрос", "FAIL", Buffer );
+            write_msg ( Log, "Опрос", "FAIL", Buffer );
         else
             return LoopError;
     }
@@ -109,13 +90,9 @@ loop_state_t __wait_script_result ( FILE *Log, pid_t pid, const char *ScriptName
 // обработать сигнал
 loop_state_t __wait_signal ( FILE *Log, pid_t pid, const char *ScriptName, const sigset_t *SignalSet )
 {
-    struct timespec Timeout;
-    Timeout.tv_sec = 1;
-    Timeout.tv_nsec = 0;
-    
     siginfo_t SignalInfo;
     
-    if ( sigtimedwait ( SignalSet, SignalInfo, Timeout ) )
+    if ( sigwaitinfo ( SignalSet, &SignalInfo ) )
     {
         if ( errno == EAGAIN )
         {
@@ -155,7 +132,7 @@ static
 loop_state_t __wait_result ( FILE *Log, pid_t pid, const char *ScriptName, const sigset_t *SignalSet )
 {
     loop_state_t LS = LoopContinue;
-    while ( ( LS = __wait_signal ( Log, pid, ScriptName, SignalSet ) ) = LoopContinue );
+    while ( ( LS = __wait_signal ( Log, pid, ScriptName, SignalSet ) ) == LoopContinue );
     return LS;
 }
 
@@ -184,7 +161,7 @@ void __run_script_error ( FILE *Log )
 { 
     char Buffer[ 256 ];
     snprintf ( Buffer, 256, "fork(): %s (%d)", strerror ( errno ), errno );
-    write_msg ( "Запуск скрипта", "FAIL", "fork()" );
+    write_log ( Log, "Запуск скрипта", "FAIL", "fork()" );
 }
 
 
@@ -202,11 +179,11 @@ loop_state_t __run_script ( FILE *Log, const char *Script, const script_option_t
     }
     else if ( ScriptPid == 0 )
     {
-        __exec_script ( Log, Script, ScriptOption );
+        __exec_script ( Log, Script, ScriptOptions );
     }
     else
     {
-        LS = __wait_result ( Log, pid, Script, SignalSet );
+        LS = __wait_result ( Log, ScriptPid, Script, SignalSet );
     }
     
     return LS;
@@ -220,25 +197,64 @@ loop_state_t __script_loop ( FILE *Log, const type_cfg_t *Type, const script_opt
     
     for ( size_t i = 0; LS == LoopOk && Type->Script[ i ] != NULL; i++ )
     {
-        LS = __run_script ( Log, Type->Script[ i ], ScriptOption, SignalSet );
+        LS = __run_script ( Log, Type->Script[ i ], ScriptOptions, SignalSet );
     }
     
     return LS;
+}
+
+// найти локальный модем
+const gate_cfg_t* __find_local_gate ( const gate_cfg_t **GateList )
+{
+    const gate_cfg_t *Gate = NULL;
+    for ( size_t i = 0; GateList[ i ] != NULL && Gate == NULL; i++ )
+    {
+        if ( GateList[ i ]->Device->Segment == Askue_Local )
+            Gate = GateList[ i ];
+    }
+    return Gate;
+}
+
+// найти модем с таким же id
+const gate_cfg_t* __find_remote_gate ( const gate_cfg_t **GateList, long int Id )
+{
+    const gate_cfg_t *Gate = NULL;
+    for ( size_t i = 0; GateList[ i ] != NULL && Gate == NULL; i++ )
+    {
+        if ( GateList[ i ]->Device->Id == Id )
+            Gate = GateList[ i ];
+    }
+    return Gate;
 }
 
 // основной цикл программы
 loop_state_t device_loop ( FILE *Log, const askue_cfg_t *ACfg, const sigset_t *SignalSet )
 {
     loop_state_t LS = LoopOk;
-    const device_cfg_t **DL = ACfg->DeviceList;
+    const device_cfg_t **DL = ( const device_cfg_t ** ) ACfg->DeviceList;
     const gate_cfg_t *LocalGate = __find_local_gate ( ACfg->GateList );
     const gate_cfg_t *CurrentGate = NULL;
     
-    script_option_t *ScriptOption = init_script_option ( ACfg );
+    script_option_t ScriptOption;
+    script_option_init ( &ScriptOption );
+    script_option_set ( &ScriptOption, SA_PORT_DBITS, ACfg->Port->DBits );
+    script_option_set ( &ScriptOption, SA_PORT_SBITS, ACfg->Port->SBits );
+    script_option_set ( &ScriptOption, SA_PORT_FILE, ACfg->Port->File );
+    script_option_set ( &ScriptOption, SA_PORT_PARITY, ACfg->Port->Parity );
+    script_option_set ( &ScriptOption, SA_PORT_SPEED, ACfg->Port->Speed );
+    script_option_set ( &ScriptOption, SA_JOURNAL_FILE, ACfg->Journal->File );
+    script_option_set ( &ScriptOption, SA_JOURNAL_FLASHBACK, ACfg->Journal->Flashback );
+    script_option_set ( &ScriptOption, SA_LOG_FILE, ACfg->Log->File );
     
-    for ( size_t i = 0; LS == LoopOk && DL[ i ] != NULL; i++ )
+    size_t i = 0;
+    while ( LS == LoopOk )
     {
         int IsConnect = 1;
+        
+        if ( DL[ i ] == NULL )
+        {
+            i = 0;
+        }
         
         if ( DL[ i ]->Segment == Askue_Remote )
         {
@@ -248,9 +264,9 @@ loop_state_t device_loop ( FILE *Log, const askue_cfg_t *ACfg, const sigset_t *S
             {
                 CurrentGate = RemoteGate;
                 
-                script_option_set ( ScriptOption, SO_PARAMETR, RemoteGate->Device->Name );
-                script_option_set ( ScriptOption, SO_TIMEOUT, LocalGate->Device->Timeout );
-                script_option_set ( ScriptOption, SO_DEVICE, LocalGate->Device->Name );
+                script_option_set ( &ScriptOption, SA_PARAMETR, RemoteGate->Device->Name );
+                script_option_set ( &ScriptOption, SA_TIMEOUT, LocalGate->Device->Timeout );
+                script_option_set ( &ScriptOption, SA_DEVICE, LocalGate->Device->Name );
                 
                 LS = __gate_open ( Log, LocalGate->Device->Type, ScriptOption, SignalSet );
                 if ( LS == LoopOk )
@@ -264,7 +280,14 @@ loop_state_t device_loop ( FILE *Log, const askue_cfg_t *ACfg, const sigset_t *S
         
         // обработка скриптов устройства
         if ( IsConnect )
-                LS = __scritp_loop ( Log, DL[ i ]->Type, ScriptOption, SignalSet );
+        {
+            script_option_unset ( &ScriptOption, SA_PARAMETR );
+            script_option_set ( &ScriptOption, SA_TIMEOUT, DL[ i ]->Timeout );
+            script_option_set ( &ScriptOption, SA_DEVICE, DL[ i ]->Name );
+            LS = __script_loop ( Log, DL[ i ]->Type, ScriptOption, SignalSet );
+        }
+        
+        i++;
     }
     
     __log_loop_state ( Log, LS );

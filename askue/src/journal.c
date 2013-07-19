@@ -128,7 +128,7 @@ int init_cnt_tbl ( sqlite3 *DB, void *arg )
         {
             if ( Device[ i ]->Class == Askue_Counter )
             {
-                char *Sql = sqlite3_mprintf ( SQL_INS_CNT_TBL, (size_t) strtol ( Device[ i ]->Id, NULL, 10 ), Device[ i ]->Type->Name );
+                char *Sql = sqlite3_mprintf ( SQL_INS_CNT_TBL, (size_t) strtol ( Device[ i ]->Name, NULL, 10 ), Device[ i ]->Type->Name );
                 if ( Sql == NULL )
                 {
                     Result = -1;

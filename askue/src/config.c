@@ -46,6 +46,14 @@ void __init_device_list ( askue_cfg_t *ACfg )
     ACfg->DeviceList = NULL;
 }
 
+// Инициализация списка гейтов
+static
+void __init_gate_list ( askue_cfg_t *ACfg )
+{
+    ACfg->GateList = NULL;
+}
+
+
 // Инициализация списка сценариев
 static
 void __init_script_list ( askue_cfg_t *ACfg )
@@ -66,6 +74,7 @@ void askue_config_init ( askue_cfg_t *ACfg )
     __init_port ( ACfg );
     __init_log ( ACfg );
     __init_db ( ACfg );
+    __init_gate_list ( ACfg );
     __init_device_list ( ACfg );
     __init_script_list ( ACfg );
     __init_report_list ( ACfg );
@@ -110,11 +119,28 @@ void __destroy_device_list ( askue_cfg_t *ACfg )
     {
         for ( size_t i = 0; ACfg->DeviceList[ i ] != NULL; i++ )
         {
-            myfree ( ACfg->DeviceList[ i ]->Id );
+            myfree ( ACfg->DeviceList[ i ]->Name );
             myfree ( ACfg->DeviceList[ i ] );
         } 
         
         myfree ( ACfg->DeviceList );
+    }
+}
+
+// Удаление данных о списке гейтов
+static
+void __destroy_gate_list ( askue_cfg_t *ACfg )
+{
+    if ( ACfg->GateList != NULL )
+    {
+        for ( size_t i = 0; ACfg->GateList[ i ] != NULL; i++ )
+        {
+            myfree ( ACfg->GateList[ i ]->Device->Name );
+            myfree ( ACfg->GateList[ i ]->Device );
+            myfree ( ACfg->GateList[ i ] );
+        } 
+        
+        myfree ( ACfg->GateList );
     }
 }
 
@@ -162,6 +188,7 @@ void askue_config_destroy ( askue_cfg_t *ACfg )
     __destroy_log ( ACfg );
     __destroy_db ( ACfg );
     __destroy_device_list ( ACfg );
+    __destroy_gate_list ( ACfg );
     __destroy_type_list ( ACfg );
     __destroy_report_list ( ACfg );
 }
@@ -337,57 +364,6 @@ int __config_read_type_list ( config_t *cfg, askue_cfg_t *ACfg )
      return 0;
 }
 
-// чтение конфигурации счётчика
-static
-int __config_read_counter ( config_setting_t *setting, askue_cfg_t *ACfg, size_t Number )
-{
-    const char *CounterTimeout;
-    if ( config_setting_lookup_string ( setting, "timeout", &CounterTimeout ) != CONFIG_TRUE )
-    {
-        return -1;
-    }
-    
-    ACfg->DeviceList[ Number ]->Class = Askue_Counter;
-    ACfg->DeviceList[ Number ]->Timeout = strtol ( CounterTimeout, NULL, 10 );
-    
-    return 0;
-}
-
-// чтение конфигурации модема
-static
-int __config_read_modem ( config_setting_t *setting, askue_cfg_t *ACfg, size_t Number )
-{
-    const char *ModemSegment;
-    if ( config_setting_lookup_string ( setting, "segment", &ModemSegment ) != CONFIG_TRUE )
-    {
-        return -1;
-    }
-    
-    if ( !strcmp ( ModemSegment, "remote" ) )
-    {
-        ACfg->DeviceList[ Number ]->Timeout = 0;
-        ACfg->DeviceList[ Number ]->Class = Askue_Modem;
-        return 0;
-    }
-    else if ( !strcmp ( ModemSegment, "local" ) )
-    {
-        const char *ModemTimeout;
-        if ( config_setting_lookup_string ( setting, "timeout", &ModemTimeout ) != CONFIG_TRUE )
-        {
-            return -1;
-        }
-        
-        ACfg->DeviceList[ Number ]->Class = Askue_Modem;
-        ACfg->DeviceList[ Number ]->Timeout = strtol ( ModemTimeout, NULL, 10 );
-        
-        return 0;
-    }
-    else
-    {
-        return -1;
-    }
-}
-
 // поиск типа устройства
 static
 type_cfg_t* __find_device_type ( askue_cfg_t *ACfg, const char *type )
@@ -405,7 +381,7 @@ type_cfg_t* __find_device_type ( askue_cfg_t *ACfg, const char *type )
 
 // расшифровка класса устройств
 static
-device_class_t what_device_class ( const char *DeviceClass )
+device_class_t __what_class ( const char *DeviceClass )
 {
     if ( !strcmp ( DeviceClass, "counter" ) )
     {
@@ -421,60 +397,96 @@ device_class_t what_device_class ( const char *DeviceClass )
     }
 }
 
+// получить сегмент
+static
+device_segment_t __what_segment ( const char *DeviceSegment )
+{
+    if ( !strcmp ( DeviceSegment, "remote" ) )
+    {
+        return Askue_Remote;
+    }
+    else if ( !strcmp ( DeviceSegment, "local" ) )
+    {
+        return Askue_Local;
+    }
+    else
+    {
+        return Askue_NoSegment;
+    }
+}
+
 // чтение конфигурации одного устройства
 static
-int __config_read_device ( config_setting_t *setting, askue_cfg_t *ACfg, size_t Number )
-{
-    ACfg->DeviceList[ Number ] = mymalloc ( sizeof ( device_cfg_t ) );
-    
-    const char *DeviceSetting[ 5 ];
+int __config_read_device ( config_setting_t *setting, askue_cfg_t *ACfg, device_cfg_t *Device )
+{    
+    const char *DeviceSetting[ 6 ];
     
     #define DeviceClass DeviceSetting[ 0 ]
     #define DeviceType DeviceSetting[ 1 ]
-    #define DeviceId DeviceSetting[ 2 ]
+    #define DeviceName DeviceSetting[ 2 ]
     #define DeviceTimeout DeviceSetting[ 3 ]
-    #define DeviceFlag DeviceSetting[ 4 ]
+    #define DeviceSegment DeviceSetting[ 4 ]
+    #define DeviceId DeviceSetting[ 5 ]
     
     if ( !( config_setting_lookup_string ( setting, "class", &(DeviceClass) ) == CONFIG_TRUE && 
-            config_setting_lookup_string ( setting, "type", &(DeviceType) ) == CONFIG_TRUE && 
-            config_setting_lookup_string ( setting, "id", &(DeviceId) ) == CONFIG_TRUE ) )
+            config_setting_lookup_string ( setting, "type", &(DeviceType) ) == CONFIG_TRUE &&  
+            config_setting_lookup_string ( setting, "name", &(DeviceName) ) == CONFIG_TRUE ) )
     {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'DeviceList' не полная" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'DeviceList' не полная" );
          return -1;
     }
-    
-    int Result = 0;
-    switch ( what_device_class ( DeviceClass ) )
+    // класс
+    Device->Class = __what_class ( DeviceClass );
+    if ( Device->Class == Askue_NoClass )
     {
-        case Askue_Modem: 
-            Result = __config_read_modem ( setting,ACfg, Number );
-            break;
-        case Askue_Counter:
-            Result = __config_read_counter ( setting, ACfg, Number );
-            break;
-        default:
-            Result = -1;
-            break;
-    }
-    if ( Result )
-    {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'DeviceList' не полная" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Не верный класс устройства" );
          return -1;
     }
-    
-    ACfg->DeviceList[ Number ]->Id = mystrdup( DeviceId );
-    ACfg->DeviceList[ Number ]->Type = __find_device_type ( ACfg, DeviceType );
-    if ( ACfg->DeviceList[ Number ]->Type == NULL )
+    // имя
+    Device->Name = mystrdup( DeviceName );
+    // тип
+    Device->Type = __find_device_type ( ACfg, DeviceType );
+    if ( Device->Type == NULL )
     {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'DeviceList' не полная" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Нет скриптов для данного типа" );
          return -1;
+    }
+    // id
+    if ( config_setting_lookup_string ( setting, "id", &(DeviceId) ) == CONFIG_TRUE )
+    {
+        Device->Id = strtol ( DeviceId, NULL, 10 );
+    }
+    // таймаут
+    if ( config_setting_lookup_string ( setting, "timeout", &(DeviceTimeout) ) == CONFIG_TRUE )
+    {
+        Device->Timeout = strtol ( DeviceTimeout, NULL, 10 );
+    }
+    else if ( Device->Class == Askue_Counter )
+    {
+        write_msg ( stderr, "Конфигурация", "FAIL", "Нет таймаута ожидания для счётчика" );
+        return -1;
+    }
+    // сегмент
+    if ( config_setting_lookup_string ( setting, "segment", &(DeviceSegment) ) == CONFIG_TRUE )
+    {
+        Device->Segment = __what_segment ( DeviceSegment );
+        if ( Device->Segment == Askue_NoSegment )
+        {
+             write_msg ( stderr, "Конфигурация", "FAIL", "Не указан сегмент сети" );
+             return -1;
+        }
+    }
+    else
+    {
+        Device->Segment = Askue_Local;
     }
     
     #undef DeviceClass
     #undef DeviceType
-    #undef DeviceId
+    #undef DeviceName
     #undef DeviceTimeout
-    #undef DeviceFlag
+    #undef DeviceSegment
+    #undef DeviceId
     
     return 0;
 }
@@ -497,7 +509,8 @@ int __config_read_device_list ( config_t *cfg, askue_cfg_t *ACfg )
      for ( size_t i = 0; i < DeviceAmount && !Result; i++ )
      {
          config_setting_t *subsetting = config_setting_get_elem ( setting, i );
-         Result = __config_read_device ( subsetting, ACfg, i );
+         ACfg->DeviceList[ i ] = mymalloc ( sizeof ( device_cfg_t ) );
+         Result = __config_read_device ( subsetting, ACfg, ACfg->DeviceList[ i ] );
      }
      if ( Result ) return -1;
      ACfg->DeviceList[ DeviceAmount ] = NULL;
@@ -530,6 +543,34 @@ int __config_read_report_list ( config_t *cfg, askue_cfg_t *ACfg )
      return 0;
 }
 
+
+// чтение конфигурации модемов
+int __config_read_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
+{
+     config_setting_t *setting = config_lookup ( cfg, "GateList" ); // поиск сети
+     if ( setting == NULL )
+     {
+         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'GateList'" );
+         return 0;
+     }
+     
+     size_t GateAmount = (size_t) config_setting_length ( setting );
+     ACfg->GateList = mymalloc ( sizeof( gate_cfg_t* ) * ( GateAmount + 1 ) );
+     
+     int Result = 0;
+     for ( size_t i = 0; i < GateAmount && !Result; i++ )
+     {
+         config_setting_t *subsetting = config_setting_get_elem ( setting, i );
+         ACfg->GateList[ i ] = mymalloc ( sizeof( gate_cfg_t ) );
+         ACfg->GateList[ i ]->Device = mymalloc ( sizeof ( device_cfg_t ) );
+         Result = __config_read_device ( subsetting, ACfg, ACfg->GateList[ i ]->Device );
+     }
+     if ( Result ) return -1;
+     ACfg->GateList[ GateAmount ] = NULL;
+     
+     return 0;
+}
+
 /*                      Точка чтения конфигурации                     */
 int askue_config_read ( askue_cfg_t *ACfg )
 {
@@ -544,6 +585,7 @@ int askue_config_read ( askue_cfg_t *ACfg )
              __config_read_port ( &cfg, ACfg ) == 0 && 
              __config_read_type_list ( &cfg, ACfg ) == 0 &&
              __config_read_report_list ( &cfg, ACfg ) == 0 &&
+             __config_read_gate_list ( &cfg, ACfg ) == 0 &&
              __config_read_device_list ( &cfg, ACfg ) == 0 )
         {
             Result = 0;

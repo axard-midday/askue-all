@@ -1,9 +1,3 @@
-/*
- * common_macro.h
- *
- *  Created on: 05.12.2012
- *      Author: andrey
- */
 
 #ifndef ASKUE_MACRO_H
 #define ASKUE_MACRO_H
