@@ -29,3 +29,12 @@ char* mystrdup ( const char *src )
         exit ( EXIT_FAILURE );
     return dest;
 }
+
+/*                      Обёртка strndup                               */
+char* mystrndup ( const char *src, size_t n )
+{
+    char *dest = strndup ( src, n );
+    if ( dest == NULL )
+        exit ( EXIT_FAILURE );
+    return dest;
+}

@@ -12,4 +12,7 @@ void* mymalloc ( size_t size );
 // обёртка strdup ()
 char* mystrdup ( const char *src );
 
+// обёртка strndup()
+char* mystrndup ( const char *src, size_t n );
+
 #endif /* ASKUE_MY_H_ */

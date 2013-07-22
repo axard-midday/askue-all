@@ -50,7 +50,8 @@ void __init_device_list ( askue_cfg_t *ACfg )
 static
 void __init_gate_list ( askue_cfg_t *ACfg )
 {
-    ACfg->GateList = NULL;
+    ACfg->RemoteGateList = NULL;
+    ACfg->LocalGate = NULL;
 }
 
 
@@ -131,17 +132,28 @@ void __destroy_device_list ( askue_cfg_t *ACfg )
 static
 void __destroy_gate_list ( askue_cfg_t *ACfg )
 {
-    if ( ACfg->GateList != NULL )
+    //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "Point 1" );
+    if ( ACfg->RemoteGateList != NULL )
     {
-        for ( size_t i = 0; ACfg->GateList[ i ] != NULL; i++ )
+        for ( size_t i = 0; ACfg->RemoteGateList[ i ] != NULL; i++ )
         {
-            myfree ( ACfg->GateList[ i ]->Device->Name );
-            myfree ( ACfg->GateList[ i ]->Device );
-            myfree ( ACfg->GateList[ i ] );
+            //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "ACfg->RemoteGateList[ i ]->Device->Name" );
+            myfree ( ACfg->RemoteGateList[ i ]->Device->Name );
+            //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "ACfg->RemoteGateList[ i ]->Device" );
+            myfree ( ACfg->RemoteGateList[ i ]->Device );
+            //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "ACfg->RemoteGateList[ i ]" );
+            myfree ( ACfg->RemoteGateList[ i ] );
         } 
         
-        myfree ( ACfg->GateList );
+        myfree ( ACfg->RemoteGateList );
     }
+    //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "Point 2" );
+    if ( ACfg->LocalGate != NULL )
+    {
+        myfree ( ACfg->LocalGate->Device->Name );
+        myfree ( ACfg->LocalGate->Device );
+        myfree ( ACfg->LocalGate );
+    } 
 }
 
 // Удаление данных о списке скриптов
@@ -185,12 +197,19 @@ void __destroy_report_list ( askue_cfg_t *ACfg )
 void askue_config_destroy ( askue_cfg_t *ACfg )
 {
     __destroy_port ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_port() - done" );
     __destroy_log ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_log() - done" );
     __destroy_db ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_db() - done" );
     __destroy_device_list ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_device_list() - done" );
     __destroy_gate_list ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_gate_list() - done" );
     __destroy_type_list ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_type_list() - done" );
     __destroy_report_list ( ACfg );
+    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_report_list() - done" );
 }
 
 /*                Функции точки чтения конфигурации                   */
@@ -202,7 +221,7 @@ int __config_read_port ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *port_setting = config_lookup ( cfg, "Port" ); // поиск сети
      if ( port_setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'Port'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'Port'" );
          return -1;
      }
      
@@ -219,7 +238,7 @@ int __config_read_port ( config_t *cfg, askue_cfg_t *ACfg )
              config_setting_lookup_string ( port_setting, "parity", &(PortParity) ) == CONFIG_TRUE &&
              config_setting_lookup_string ( port_setting, "speed", &(PortSpeed) ) == CONFIG_TRUE ) )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'Port' не полная" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'Port' не полная" );
          return -1;
      }
      
@@ -247,7 +266,7 @@ int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "Log" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'Log'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'Log'" );
          return -1;
      }
     
@@ -258,7 +277,7 @@ int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
              config_setting_lookup_string ( setting, "lines", &(LogLines) ) == CONFIG_TRUE &&
              config_setting_lookup_string ( setting, "mode", &(LogMode) ) == CONFIG_TRUE ) )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'Log' не полная" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'Log' не полная" );
          return -1;
      }
      
@@ -277,22 +296,22 @@ int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "Journal" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'Journal'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'Journal'" );
          return -1;
      }
      
      const char *JnlFile;
      if ( config_setting_lookup_string ( setting, "file", &(JnlFile) ) != CONFIG_TRUE )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Запись 'Journal' не полная" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'Journal' не полная" );
          return -1;
      }
      
      const char *JnlSize;
      if ( config_setting_lookup_string ( setting, "size", &(JnlSize) ) != CONFIG_TRUE )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Отсутствует запись 'Journal.size'" );
-         write_msg ( stderr, "Чтение конфигурации", "OK", "Установка значения по умолчанию 'Journal.size = 3'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Отсутствует запись 'Journal.size'" );
+         write_msg ( stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.size = 3'" );
          ACfg->Journal->Size = 3;
      }
      else
@@ -303,8 +322,8 @@ int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
      const char *JnlFlashback;
      if ( config_setting_lookup_string ( setting, "flashback", &(JnlFlashback) ) != CONFIG_TRUE )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "Отсутствует запись 'Journal.flashback'" );
-         write_msg ( stderr, "Чтение конфигурации", "OK", "Установка значения по умолчанию 'Journal.flashback = 0'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "Отсутствует запись 'Journal.flashback'" );
+         write_msg ( stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.flashback = 0'" );
          ACfg->Journal->Flashback = 0;
      }
      else
@@ -318,6 +337,25 @@ int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
      return 0;
 }
 
+// чтение скрипта и его параметра
+static
+void __config_script ( char **ScriptName, char **ScriptParametr, const char *script )
+{
+    const char *Parametr = strchr ( script, ':' );
+    
+    if ( Parametr != NULL )
+    {
+        *ScriptParametr = mystrdup ( Parametr + 1 );
+        size_t len = (size_t)( (const char*) Parametr - (const char*)script );
+        *ScriptName = mystrndup ( script, len );
+    }
+    else
+    {
+        *ScriptParametr = NULL;
+        *ScriptName = mystrdup ( script );
+    }
+}
+
 // чтение конфигурации одного типа
 static
 void __config_read_type ( config_setting_t *setting, askue_cfg_t *ACfg, size_t Number )
@@ -325,18 +363,27 @@ void __config_read_type ( config_setting_t *setting, askue_cfg_t *ACfg, size_t N
     ACfg->TypeList[ Number ] = mymalloc ( sizeof ( type_cfg_t ) );
     
     size_t ScriptAmount = (size_t) config_setting_length ( setting );
-    ACfg->TypeList[ Number ]->Script = mymalloc ( sizeof ( char* ) * ( ScriptAmount + 1 ) );
-    
+    ACfg->TypeList[ Number ]->Script = mymalloc ( sizeof ( script_cfg_t* ) * ( ScriptAmount + 1 ) );
+    for ( size_t i = 0; i < ScriptAmount + 1; i++ )
+    {
+        ACfg->TypeList[ Number ]->Script[ i ] = NULL;
+    } 
     const char *type = config_setting_name ( setting );
      ACfg->TypeList[ Number ]->Name = mystrdup ( type );
      
     for ( size_t i = 0; i < ScriptAmount; i++ )
     {
+        
         const char *script = config_setting_get_string_elem ( setting, i );
-        ACfg->TypeList[ Number ]->Script[ i ] = mystrdup ( script );
+        //ACfg->TypeList[ Number ]->Script[ i ] = mystrdup ( script );
+        ACfg->TypeList[ Number ]->Script[ i ] = mymalloc ( sizeof ( script_cfg_t ) );
+        char *ScriptName, *ScriptParametr;
+        __config_script ( &ScriptName, &ScriptParametr, script );
+        ACfg->TypeList[ Number ]->Script[ i ]->Name = ScriptName;
+        ACfg->TypeList[ Number ]->Script[ i ]->Parametr  =ScriptParametr;
     }
     
-    ACfg->TypeList[ Number ]->Script[ ScriptAmount ] = NULL;
+    
 }
 
 // чтение конфигурации типов устройств и их обработчиков
@@ -346,12 +393,16 @@ int __config_read_type_list ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "ScriptList" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'ScriptList'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'ScriptList'" );
          return -1;
      }
      
      size_t TypeAmount = (size_t) config_setting_length ( setting );
      ACfg->TypeList = mymalloc ( sizeof ( type_cfg_t* ) * ( TypeAmount + 1 ) );
+     for ( size_t i = 0; i < TypeAmount + 1; i++ )
+     {
+         ACfg->TypeList[ i ] = NULL;
+     }
      
      for ( size_t i = 0; i < TypeAmount; i++ )
      {
@@ -359,7 +410,7 @@ int __config_read_type_list ( config_t *cfg, askue_cfg_t *ACfg )
          __config_read_type ( subsetting, ACfg, i );
      }
      
-     ACfg->TypeList[ TypeAmount ] = NULL;
+     
      
      return 0;
 }
@@ -498,13 +549,16 @@ int __config_read_device_list ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "DeviceList" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'DeviceList'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'DeviceList'" );
          return -1;
      }
      
      size_t DeviceAmount = (size_t) config_setting_length ( setting );
      ACfg->DeviceList = mymalloc ( sizeof( device_cfg_t* ) * ( DeviceAmount + 1 ) );
-     
+     for ( size_t i = 0; i < DeviceAmount + 1; i++ )
+     {
+         ACfg->DeviceList[ i ] = NULL;
+     }
      int Result = 0;
      for ( size_t i = 0; i < DeviceAmount && !Result; i++ )
      {
@@ -513,7 +567,6 @@ int __config_read_device_list ( config_t *cfg, askue_cfg_t *ACfg )
          Result = __config_read_device ( subsetting, ACfg, ACfg->DeviceList[ i ] );
      }
      if ( Result ) return -1;
-     ACfg->DeviceList[ DeviceAmount ] = NULL;
      
      return 0;
 }
@@ -524,13 +577,16 @@ int __config_read_report_list ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "ReportList" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'ReportList'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'ReportList'" );
          return -1;
      }
      
      size_t ReportAmount = (size_t) config_setting_length ( setting );
      ACfg->ReportList = mymalloc ( sizeof( report_cfg_t* ) * ( ReportAmount + 1 ) );
-     
+     for ( size_t i = 0; i < ReportAmount + 1; i++ )
+     {
+         ACfg->ReportList[ i ] = NULL;
+     }
      for ( size_t i = 0; i < ReportAmount; i++ )
      {
          ACfg->ReportList[ i ] = mymalloc ( sizeof( report_cfg_t ) );
@@ -538,35 +594,54 @@ int __config_read_report_list ( config_t *cfg, askue_cfg_t *ACfg )
          ACfg->ReportList[ i ]->Name = mystrdup ( ReportName );
      }
      
-     ACfg->ReportList[ ReportAmount ] = NULL;
-     
      return 0;
+}
+
+// чтение конфигурации базового модема
+int __config_read_local_gate ( config_t *cfg, askue_cfg_t *ACfg )
+{
+     config_setting_t *setting = config_lookup ( cfg, "LocalGate" ); // поиск сети
+     if ( setting == NULL )
+     {
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'LocalGate'" );
+         return 0;
+     }
+     
+     ACfg->LocalGate = mymalloc ( sizeof( gate_cfg_t ) );
+     ACfg->LocalGate->Device = mymalloc ( sizeof ( device_cfg_t ) );
+     int Result = __config_read_device ( setting, ACfg, ACfg->LocalGate->Device );
+     if ( Result ) 
+        return -1;
+     else 
+        return 0;
 }
 
 
 // чтение конфигурации модемов
-int __config_read_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
+int __config_read_remote_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
 {
-     config_setting_t *setting = config_lookup ( cfg, "GateList" ); // поиск сети
+     config_setting_t *setting = config_lookup ( cfg, "RemoteGateList" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Чтение конфигурации", "FAIL", "В конфигурации отсутствует запись 'GateList'" );
+         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'RemoteGateList'" );
          return 0;
      }
      
      size_t GateAmount = (size_t) config_setting_length ( setting );
-     ACfg->GateList = mymalloc ( sizeof( gate_cfg_t* ) * ( GateAmount + 1 ) );
-     
+     ACfg->RemoteGateList = mymalloc ( sizeof( gate_cfg_t* ) * ( GateAmount + 1 ) );
+     for ( size_t i = 0; i < GateAmount + 1; i++ )
+     {
+         ACfg->RemoteGateList[ i ] = NULL;
+     }
      int Result = 0;
      for ( size_t i = 0; i < GateAmount && !Result; i++ )
      {
          config_setting_t *subsetting = config_setting_get_elem ( setting, i );
-         ACfg->GateList[ i ] = mymalloc ( sizeof( gate_cfg_t ) );
-         ACfg->GateList[ i ]->Device = mymalloc ( sizeof ( device_cfg_t ) );
-         Result = __config_read_device ( subsetting, ACfg, ACfg->GateList[ i ]->Device );
+         ACfg->RemoteGateList[ i ] = mymalloc ( sizeof( gate_cfg_t ) );
+         ACfg->RemoteGateList[ i ]->Device = mymalloc ( sizeof ( device_cfg_t ) );
+         Result = __config_read_device ( subsetting, ACfg, ACfg->RemoteGateList[ i ]->Device );
      }
      if ( Result ) return -1;
-     ACfg->GateList[ GateAmount ] = NULL;
      
      return 0;
 }
@@ -585,7 +660,8 @@ int askue_config_read ( askue_cfg_t *ACfg )
              __config_read_port ( &cfg, ACfg ) == 0 && 
              __config_read_type_list ( &cfg, ACfg ) == 0 &&
              __config_read_report_list ( &cfg, ACfg ) == 0 &&
-             __config_read_gate_list ( &cfg, ACfg ) == 0 &&
+             __config_read_remote_gate_list ( &cfg, ACfg ) == 0 &&
+             __config_read_local_gate ( &cfg, ACfg ) == 0 &&
              __config_read_device_list ( &cfg, ACfg ) == 0 )
         {
             Result = 0;

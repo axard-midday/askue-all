@@ -227,6 +227,22 @@ const gate_cfg_t* __find_remote_gate ( const gate_cfg_t **GateList, long int Id 
     return Gate;
 }
 
+// предустановка опций скрипта
+static
+void __script_option_preset ( script_option_t *ScriptOption, const askue_cfg_t *ACfg )
+{
+    script_option_init ( ScriptOption );
+    script_option_set ( ScriptOption, SA_PORT_DBITS, ACfg->Port->DBits );
+    script_option_set ( ScriptOption, SA_PORT_SBITS, ACfg->Port->SBits );
+    script_option_set ( ScriptOption, SA_PORT_FILE, ACfg->Port->File );
+    script_option_set ( ScriptOption, SA_PORT_PARITY, ACfg->Port->Parity );
+    script_option_set ( ScriptOption, SA_PORT_SPEED, ACfg->Port->Speed );
+    script_option_set ( ScriptOption, SA_JOURNAL_FILE, ACfg->Journal->File );
+    script_option_set ( ScriptOption, SA_JOURNAL_FLASHBACK, ACfg->Journal->Flashback );
+    script_option_set ( ScriptOption, SA_LOG_FILE, ACfg->Log->File );
+}
+
+
 // основной цикл программы
 loop_state_t device_loop ( FILE *Log, const askue_cfg_t *ACfg, const sigset_t *SignalSet )
 {
@@ -236,15 +252,7 @@ loop_state_t device_loop ( FILE *Log, const askue_cfg_t *ACfg, const sigset_t *S
     const gate_cfg_t *CurrentGate = NULL;
     
     script_option_t ScriptOption;
-    script_option_init ( &ScriptOption );
-    script_option_set ( &ScriptOption, SA_PORT_DBITS, ACfg->Port->DBits );
-    script_option_set ( &ScriptOption, SA_PORT_SBITS, ACfg->Port->SBits );
-    script_option_set ( &ScriptOption, SA_PORT_FILE, ACfg->Port->File );
-    script_option_set ( &ScriptOption, SA_PORT_PARITY, ACfg->Port->Parity );
-    script_option_set ( &ScriptOption, SA_PORT_SPEED, ACfg->Port->Speed );
-    script_option_set ( &ScriptOption, SA_JOURNAL_FILE, ACfg->Journal->File );
-    script_option_set ( &ScriptOption, SA_JOURNAL_FLASHBACK, ACfg->Journal->Flashback );
-    script_option_set ( &ScriptOption, SA_LOG_FILE, ACfg->Log->File );
+    __script_option_preset ( &ScrriptOption, ACfg );
     
     size_t i = 0;
     while ( LS == LoopOk )
@@ -268,6 +276,7 @@ loop_state_t device_loop ( FILE *Log, const askue_cfg_t *ACfg, const sigset_t *S
                 script_option_set ( &ScriptOption, SA_TIMEOUT, LocalGate->Device->Timeout );
                 script_option_set ( &ScriptOption, SA_DEVICE, LocalGate->Device->Name );
                 
+                /* TODO */
                 LS = __gate_open ( Log, LocalGate->Device->Type, ScriptOption, SignalSet );
                 if ( LS == LoopOk )
                     IsConnect = 1;

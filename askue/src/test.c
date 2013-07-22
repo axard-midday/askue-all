@@ -28,7 +28,7 @@
 #include "log.h"
 #include "write_msg.h"
 #include "script_option.h"
-#include "device_loop.h"
+#include "monitor.h"
 
 #define TESTBIT(bitfield, bitindex) \
 	( !!( ( bitfield ) & ( 1 << ( bitindex ) ) ) )
@@ -36,21 +36,13 @@
 int main(int argc, char **argv)
 {
 	write_msg ( stderr, "Test", "OK", "Hello, World!" );
-    /*
-    script_option_t SO;
-    
-    script_option_init ( &SO );
-    script_option_set ( &SO, SA_PORT_PARITY, "no" );
-    
-    if ( TESTBIT ( SO.Flag, SA_PORT_PARITY ) )
-        printf ( "%s\n", SO.Value[ SA_PORT_PARITY ] );
     
     askue_cfg_t Cfg;
     askue_config_init ( &Cfg );
     if ( !askue_config_read ( &Cfg ) )
     {
         write_msg ( stderr, "Test", "OK", "Config read!" );
-        
+        /*
         if ( askue_journal_init ( &Cfg ) )
             write_msg ( stderr, "Test", "FAIL", "Journal not Init!" );
         else
@@ -78,10 +70,12 @@ int main(int argc, char **argv)
             write_msg ( stderr, "Test", "OK", "Log close!" );
             
         }
+        */
+        //run_monitor_loop ( stdout, &Cfg, NULL );
         
     }
     askue_config_destroy ( &Cfg );
-    */
+    
 	return 0;
 }
 

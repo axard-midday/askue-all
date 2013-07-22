@@ -51,7 +51,13 @@ typedef struct
 typedef struct
 {
     char *Name;
-    char **Script;
+    char *Parametr;
+} script_cfg_t;
+
+typedef struct
+{
+    char *Name;
+    script_cfg_t **Script;
 } type_cfg_t;
 
 typedef struct
@@ -80,7 +86,8 @@ typedef struct
     port_cfg_t *Port;
     log_cfg_t *Log;
     journal_cfg_t *Journal;
-    gate_cfg_t **GateList;
+    gate_cfg_t *LocalGate;
+    gate_cfg_t **RemoteGateList;
     device_cfg_t **DeviceList;
     type_cfg_t **TypeList;
     report_cfg_t **ReportList;
