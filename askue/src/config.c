@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <libconfig.h>
 
 #include "config.h"
@@ -197,19 +198,19 @@ void __destroy_report_list ( askue_cfg_t *ACfg )
 void askue_config_destroy ( askue_cfg_t *ACfg )
 {
     __destroy_port ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_port() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_port() - done" );
     __destroy_log ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_log() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_log() - done" );
     __destroy_db ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_db() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_db() - done" );
     __destroy_device_list ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_device_list() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_device_list() - done" );
     __destroy_gate_list ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_gate_list() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_gate_list() - done" );
     __destroy_type_list ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_type_list() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_type_list() - done" );
     __destroy_report_list ( ACfg );
-    write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_report_list() - done" );
+    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_report_list() - done" );
 }
 
 /*                Функции точки чтения конфигурации                   */
@@ -345,7 +346,10 @@ void __config_script ( char **ScriptName, char **ScriptParametr, const char *scr
     
     if ( Parametr != NULL )
     {
-        *ScriptParametr = mystrdup ( Parametr + 1 );
+        Parametr++;
+        while ( *Parametr != '\0' && isspace ( *Parametr ) )
+            Parametr++;
+        *ScriptParametr = mystrdup ( Parametr );
         size_t len = (size_t)( (const char*) Parametr - (const char*)script );
         *ScriptName = mystrndup ( script, len );
     }
@@ -353,6 +357,29 @@ void __config_script ( char **ScriptName, char **ScriptParametr, const char *scr
     {
         *ScriptParametr = NULL;
         *ScriptName = mystrdup ( script );
+    }
+}
+
+
+// чтение скрипта и его параметра
+static
+void __config_report ( char **ReportName, char **ReportParametr, const char *report )
+{
+    const char *Parametr = strchr ( report, ':' );
+    
+    if ( Parametr != NULL )
+    {
+        Parametr++;
+        while ( *Parametr != '\0' && isspace ( *Parametr ) )
+            Parametr++;
+        *ReportParametr = mystrdup ( Parametr );
+        size_t len = (size_t)( (const char*) Parametr - (const char*)report );
+        *ReportName = mystrndup ( report, len );
+    }
+    else
+    {
+        *ReportParametr = NULL;
+        *ReportName = mystrdup ( report );
     }
 }
 
@@ -382,8 +409,6 @@ void __config_read_type ( config_setting_t *setting, askue_cfg_t *ACfg, size_t N
         ACfg->TypeList[ Number ]->Script[ i ]->Name = ScriptName;
         ACfg->TypeList[ Number ]->Script[ i ]->Parametr  =ScriptParametr;
     }
-    
-    
 }
 
 // чтение конфигурации типов устройств и их обработчиков
@@ -409,8 +434,6 @@ int __config_read_type_list ( config_t *cfg, askue_cfg_t *ACfg )
          config_setting_t *subsetting = config_setting_get_elem ( setting, i );
          __config_read_type ( subsetting, ACfg, i );
      }
-     
-     
      
      return 0;
 }
@@ -499,9 +522,10 @@ int __config_read_device ( config_setting_t *setting, askue_cfg_t *ACfg, device_
     Device->Type = __find_device_type ( ACfg, DeviceType );
     if ( Device->Type == NULL )
     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Нет скриптов для данного типа" );
-         return -1;
+        write_msg ( stderr, "Конфигурация", "FAIL", "Нет скриптов для данного типа" );
+        return -1;
     }
+    
     // id
     if ( config_setting_lookup_string ( setting, "id", &(DeviceId) ) == CONFIG_TRUE )
     {
@@ -590,8 +614,10 @@ int __config_read_report_list ( config_t *cfg, askue_cfg_t *ACfg )
      for ( size_t i = 0; i < ReportAmount; i++ )
      {
          ACfg->ReportList[ i ] = mymalloc ( sizeof( report_cfg_t ) );
-         const char *ReportName = config_setting_get_string_elem ( setting, i );
-         ACfg->ReportList[ i ]->Name = mystrdup ( ReportName );
+         const char *Report = config_setting_get_string_elem ( setting, i );
+         __config_report ( &(ACfg->ReportList[ i ]->Name), 
+                           &(ACfg->ReportList[ i ]->Parametr), 
+                           Report );
      }
      
      return 0;
@@ -640,6 +666,7 @@ int __config_read_remote_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
          ACfg->RemoteGateList[ i ] = mymalloc ( sizeof( gate_cfg_t ) );
          ACfg->RemoteGateList[ i ]->Device = mymalloc ( sizeof ( device_cfg_t ) );
          Result = __config_read_device ( subsetting, ACfg, ACfg->RemoteGateList[ i ]->Device );
+         ACfg->RemoteGateList[ i ]->Device->Timeout = ACfg->LocalGate->Device->Timeout;
      }
      if ( Result ) return -1;
      
@@ -660,8 +687,8 @@ int askue_config_read ( askue_cfg_t *ACfg )
              __config_read_port ( &cfg, ACfg ) == 0 && 
              __config_read_type_list ( &cfg, ACfg ) == 0 &&
              __config_read_report_list ( &cfg, ACfg ) == 0 &&
-             __config_read_remote_gate_list ( &cfg, ACfg ) == 0 &&
              __config_read_local_gate ( &cfg, ACfg ) == 0 &&
+             __config_read_remote_gate_list ( &cfg, ACfg ) == 0 &&
              __config_read_device_list ( &cfg, ACfg ) == 0 )
         {
             Result = 0;

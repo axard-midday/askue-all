@@ -73,6 +73,7 @@ typedef struct
 typedef struct
 {
     char *Name;
+    char *Parametr;
 } report_cfg_t;
 
 typedef struct

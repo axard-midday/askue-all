@@ -33,10 +33,28 @@
 #define TESTBIT(bitfield, bitindex) \
 	( !!( ( bitfield ) & ( 1 << ( bitindex ) ) ) )
 
+static
+void __test_signal ( sigset_t *sigset )
+{
+    // настраиваем сигналы которые будем обрабатывать
+    sigemptyset(sigset);
+    // сигнал остановки процесса пользователем
+    sigaddset(sigset, SIGQUIT);
+    // сигнал для остановки процесса пользователем с терминала
+    sigaddset(sigset, SIGINT);
+    // сигнал запроса завершения процесса
+    sigaddset(sigset, SIGTERM);
+    // сигнал посылаемый при изменении статуса дочернего процесса
+    sigaddset(sigset, SIGCHLD); 
+    // пользовательский сигнал который мы будем использовать для обновления конфига
+    sigaddset(sigset, SIGUSR1); 
+    sigprocmask(SIG_BLOCK, sigset, NULL);
+}
+
+
+
 int main(int argc, char **argv)
 {
-	write_msg ( stderr, "Test", "OK", "Hello, World!" );
-    
     askue_cfg_t Cfg;
     askue_config_init ( &Cfg );
     if ( !askue_config_read ( &Cfg ) )
@@ -71,7 +89,9 @@ int main(int argc, char **argv)
             
         }
         */
-        //run_monitor_loop ( stdout, &Cfg, NULL );
+        sigset_t SigSet;
+        __test_signal ( &SigSet );
+        run_monitor_loop ( stdout, &Cfg, ( const sigset_t* ) &SigSet );
         
     }
     askue_config_destroy ( &Cfg );
