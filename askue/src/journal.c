@@ -19,7 +19,7 @@ int sqlite3_exec_simple_decore ( sqlite3 *DB, const char *Request )
     
     if ( st != SQLITE_OK && st != SQLITE_CONSTRAINT )
     {
-        write_msg ( stderr, "Запрос к Базе", "FAIL", ErrorStr );
+        write_msg ( stderr, "Журнал", "FAIL", ErrorStr );
         write_msg ( stderr, "-||-", "FAIL", "В запросе:" );
         write_msg ( stderr, "-||-", "FAIL", Request );
         
@@ -87,7 +87,7 @@ int init_log_tbl ( sqlite3 *DB, void *arg )
     }
     else
     {
-        write_msg ( stderr, "Инициализация таблицы лога", "FAIL", "Ошибка sqlite3_mprintf()" );
+        write_msg ( stderr, "Журнал", "FAIL", "Таблица лога: ошибка sqlite3_mprintf()" );
         return -1;
     }
     
@@ -102,7 +102,7 @@ int init_log_tbl ( sqlite3 *DB, void *arg )
     }
     else
     {
-        write_msg ( stderr, "Инициализация таблицы лога", "FAIL", "Ошибка sqlite3_mprintf()" );
+        write_msg ( stderr, "Журнал", "FAIL", "Таблица лога: ошибка sqlite3_mprintf()" );
         return -1;
     }
     
@@ -178,21 +178,24 @@ int askue_journal_init ( askue_cfg_t *ACfg )
     if ( sqlite3_open ( ACfg->Journal->File, &DB ) != SQLITE_OK )
     {
         char Buffer[ 256 ];
-        snprintf ( Buffer, 256, "%s", sqlite3_errmsg ( DB ) );
-        write_msg ( stderr, "Открытие базы данных", "FAIL", Buffer );
+        snprintf ( Buffer, 256, "Попытка открытия: %s", sqlite3_errmsg ( DB ) );
+        write_msg ( stderr, "Журнал", "FAIL", Buffer );
         sqlite3_close ( DB );
         return -1;
     }
+    
     int Result;
     if ( !__init_tbl ( DB, SQL_CRT_REG_TBL, SQL_CRT_REG_ID, NULL, NULL ) &&
          !__init_tbl ( DB, SQL_CRT_LOG_TBL, SQL_CRT_LOG_ID, init_log_tbl, ACfg ) &&
          !__init_tbl ( DB, SQL_CRT_CNT_TBL, SQL_CRT_CNT_ID, init_cnt_tbl, ACfg ) )
     {
-        write_msg ( stderr, "Инициализация Базы", "OK", "Успешно созданы таблицы 'reg_tbl', 'cnt_tbl', 'log_tbl'" );
+        verbose_msg ( ACfg->Flag, stdout, "Журнал", "OK", "Инициализация успешно завршена." );
+        Result = 0;
     }
     else
     {
-        write_msg ( stderr, "Инициализация Базы", "FAIL", "Аварийное завершение" );
+        verbose_msg ( ACfg->Flag, stdout, "Журнал", "FAIL", "Инициализация остановлена в связи с ошибкой." );
+        Result = -1;
     }
     
     sqlite3_close ( DB );

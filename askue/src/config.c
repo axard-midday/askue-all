@@ -5,6 +5,7 @@
 #include <libconfig.h>
 
 #include "config.h"
+#include "files.h"
 #include "write_msg.h"
 #include "my.h"
 
@@ -73,6 +74,7 @@ void __init_report_list ( askue_cfg_t *ACfg )
 /*                    Точка сбора конфигурации                        */
 void askue_config_init ( askue_cfg_t *ACfg )
 {
+    ACfg->Flag = 0;
     __init_port ( ACfg );
     __init_log ( ACfg );
     __init_db ( ACfg );
@@ -250,6 +252,8 @@ int __config_read_port ( config_t *cfg, askue_cfg_t *ACfg )
      ACfg->Port->Parity = mystrdup ( PortParity );
      ACfg->Port->File = mystrdup ( PortFile );
      
+     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Настройки порта успешно считаны." );
+     
      return 0;
      
      #undef PortFile
@@ -287,6 +291,8 @@ int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
      ACfg->Log->Lines = strtol ( LogLines, NULL, 10 );
      ACfg->Log->Mode = mystrdup ( LogMode );
      
+     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Настройки лога успешно считаны." );
+     
      return 0;
 }
 
@@ -311,8 +317,8 @@ int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
      const char *JnlSize;
      if ( config_setting_lookup_string ( setting, "size", &(JnlSize) ) != CONFIG_TRUE )
      {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Отсутствует запись 'Journal.size'" );
-         write_msg ( stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.size = 3'" );
+         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "ERROR", "Отсутствует запись 'Journal.size'" );
+         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.size = 3'" );
          ACfg->Journal->Size = 3;
      }
      else
@@ -323,8 +329,8 @@ int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
      const char *JnlFlashback;
      if ( config_setting_lookup_string ( setting, "flashback", &(JnlFlashback) ) != CONFIG_TRUE )
      {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Отсутствует запись 'Journal.flashback'" );
-         write_msg ( stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.flashback = 0'" );
+         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "ERROR", "Отсутствует запись 'Journal.flashback'" );
+         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.flashback = 0'" );
          ACfg->Journal->Flashback = 0;
      }
      else
@@ -334,6 +340,8 @@ int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
      
      ACfg->Journal = mymalloc ( sizeof ( journal_cfg_t ) );
      ACfg->Journal->File = mystrdup ( JnlFile );
+     
+     verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Настройки журнала успешно считаны." );
      
      return 0;
 }
@@ -434,6 +442,8 @@ int __config_read_type_list ( config_t *cfg, askue_cfg_t *ACfg )
          config_setting_t *subsetting = config_setting_get_elem ( setting, i );
          __config_read_type ( subsetting, ACfg, i );
      }
+     
+     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список типов успешно считан." );
      
      return 0;
 }
@@ -592,6 +602,8 @@ int __config_read_device_list ( config_t *cfg, askue_cfg_t *ACfg )
      }
      if ( Result ) return -1;
      
+     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список устройств успешно cчитан." );
+     
      return 0;
 }
 
@@ -620,6 +632,8 @@ int __config_read_report_list ( config_t *cfg, askue_cfg_t *ACfg )
                            Report );
      }
      
+     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список отчётов успешно считан." );
+     
      return 0;
 }
 
@@ -629,7 +643,7 @@ int __config_read_local_gate ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "LocalGate" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'LocalGate'" );
+         verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "ERROR", "В конфигурации отсутствует запись 'LocalGate'" );
          return 0;
      }
      
@@ -637,9 +651,14 @@ int __config_read_local_gate ( config_t *cfg, askue_cfg_t *ACfg )
      ACfg->LocalGate->Device = mymalloc ( sizeof ( device_cfg_t ) );
      int Result = __config_read_device ( setting, ACfg, ACfg->LocalGate->Device );
      if ( Result ) 
+     {
         return -1;
-     else 
-        return 0;
+     }
+     else
+     {
+         verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Конфигурация базового модема успешно считана." );
+         return 0;
+     }
 }
 
 
@@ -649,7 +668,7 @@ int __config_read_remote_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
      config_setting_t *setting = config_lookup ( cfg, "RemoteGateList" ); // поиск сети
      if ( setting == NULL )
      {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'RemoteGateList'" );
+         write_msg ( stderr, "Конфигурация", "ERROR", "В конфигурации отсутствует запись 'RemoteGateList'" );
          return 0;
      }
      
@@ -670,6 +689,8 @@ int __config_read_remote_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
      }
      if ( Result ) return -1;
      
+     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список удалённых модемов успешно cчитан." );
+     
      return 0;
 }
 
@@ -677,10 +698,17 @@ int __config_read_remote_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
 int askue_config_read ( askue_cfg_t *ACfg )
 {
     int Result = -1; 
+    
     config_t cfg;
 	config_init ( &cfg ); // выделить память под переменную с конфигурацией
-	if ( config_read_file ( &cfg, ASKUE_CONFIG_FILE ) == CONFIG_TRUE ) // открыть и прочитать файл
+    
+    char Buffer[ 256 ];
+    snprintf ( Buffer, 256, "Открываем файл: '%s'", ASKUE_FILE_CONFIG );
+    verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", Buffer );
+    
+	if ( config_read_file ( &cfg, ASKUE_FILE_CONFIG ) == CONFIG_TRUE ) // открыть и прочитать файл
 	{
+        verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Файл '/etc/askue/askue.cfg' успешно открыт." );
         // порт
         if ( __config_read_db ( &cfg, ACfg ) == 0 &&
              __config_read_log ( &cfg, ACfg ) == 0 &&
@@ -691,14 +719,14 @@ int askue_config_read ( askue_cfg_t *ACfg )
              __config_read_remote_gate_list ( &cfg, ACfg ) == 0 &&
              __config_read_device_list ( &cfg, ACfg ) == 0 )
         {
+            verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Считывание завершено без ошибок." );
             Result = 0;
         }
     }
     else
     {
-        char Buffer[ 256 ];
-        snprintf ( Buffer, 256, "%s at line %d", config_error_text ( &cfg ), config_error_line ( &cfg ) );
-        write_msg ( stderr, "Открытие файла конфигурации", "FAIL", Buffer );
+        snprintf ( Buffer, 256, "%s at line %d.", config_error_text ( &cfg ), config_error_line ( &cfg ) );
+        verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "FAIL", Buffer );
     }
     config_destroy ( &cfg );
     return Result;

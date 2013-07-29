@@ -2,14 +2,16 @@
 #define ASKUE_CONFIG_H_
 
 #include <libconfig.h>
+#include <stdint.h>
 
-#define ASKUE_CONFIG_FILE "askue.cfg"
+//#define ASKUE_CONFIG_FILE "askue.cfg"
 
 /*
  * Типы можно было бы сделать и более сжато,
  * но при таком построении будет легче
  * осуществлять нововведения
  */
+
 
 typedef enum
 {
@@ -92,6 +94,7 @@ typedef struct
     device_cfg_t **DeviceList;
     type_cfg_t **TypeList;
     report_cfg_t **ReportList;
+    uint32_t Flag;
 } askue_cfg_t;
 
 // инициализироать переменную конфигурации

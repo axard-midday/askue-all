@@ -50,7 +50,7 @@ int askue_log_open ( FILE **Ptr, const askue_cfg_t *Cfg )
     }
     
     if ( snprintf ( Buffer, 256, "Лог открыт по адресу: %s", Cfg->Log->File ) > 0 )   
-        write_msg ( stderr, "Лог", "OK", Buffer );
+        verbose_msg ( Cfg->Flag, stderr, "Лог", "OK", Buffer );
         
     ( *Ptr ) = _F;
         
@@ -83,12 +83,6 @@ void askue_log_close ( FILE **Log )
         fclose ( *Log );
         ( *Log ) = NULL;
     }
-}
-
-// запись в лог
-void write_log ( FILE *Log, const char *Hdr, const char *St, const char *Msg )
-{
-    write_msg ( Log, Hdr, St, Msg );
 }
 
 // узнать кол-во строк в файле
@@ -194,7 +188,7 @@ int askue_log_cut ( FILE **Log, const askue_cfg_t *Cfg )
         return -1;
     
     // забавно звучит :-)
-    write_msg ( ( *Log ), "Лог", "OK", "Обрезание успешно завершено" );
+    verbose_msg ( Cfg->Flag, ( *Log ), "Лог", "OK", "Обрезание успешно завершено" );
         
     return 0;
 }

@@ -317,7 +317,7 @@ int __condition_1 ( const inquire_var_t *_Var, const inquire_input_t *_Input, si
 
 // цикл опроса устройст
 static
-int __foreach_device ( inquire_var_t *_Var, const inquire_input_t *_Input )
+int __foreach_device ( inquire_var_t *_Var, const inquire_input_t *_Input, uint32_t Flag )
 {
     const gate_cfg_t *LastConnectedGate = NULL;
     
@@ -331,6 +331,8 @@ int __foreach_device ( inquire_var_t *_Var, const inquire_input_t *_Input )
                                                                   
             if ( LastConnectedGate != RemoteGate )
             {
+                snprintf ( Buffer, 256, "Уставнока соединения '%s' --> '%s'", _Input->LocalGate->Device->Name, RemoteGate->Device->Name );
+                verbose_msg ( Flag, _Var->Log, "Демон", "OK", Buffer );
                 //memset ( Buffer, '\0', 26 );
                 //memset ( Buffer, '_', 25 );
                 //write_log ( _Var->Log, "Опрос", "TEST", Buffer );
@@ -354,8 +356,8 @@ int __foreach_device ( inquire_var_t *_Var, const inquire_input_t *_Input )
         __foreach_script ( _Var, _Input->DeviceList[ i ], _Input->SignalSet );
     }
     
-    //if ( *( _Var->LoopStatus ) == LoopOk )
-    //    *( _Var->LoopStatus ) = LoopExit;
+    if ( *( _Var->LoopStatus ) == LoopOk )
+        *( _Var->LoopStatus ) = LoopExit;
     return *( _Var->LoopStatus ) == LoopOk;
 }
 
@@ -371,7 +373,8 @@ int __foreach_report ( inquire_var_t *_Var, const report_cfg_t **ReportList, con
         }
         *( _Var->LoopStatus ) = __run_script ( _Var->Log, ReportList[ i ]->Name, _Var->ScriptOption, SignalSet );
     }
-    
+    if ( *( _Var->LoopStatus ) == LoopOk )
+        *( _Var->LoopStatus ) = LoopExit;
     return *( _Var->LoopStatus ) == LoopOk;
 }
 
@@ -379,6 +382,7 @@ int __foreach_report ( inquire_var_t *_Var, const report_cfg_t **ReportList, con
 static
 int __run_device_loop ( loop_state_t *LoopStatus, FILE *Log, const askue_cfg_t *ACfg, const sigset_t *SignalSet )
 {
+    verbose_msg ( ACfg->Flag, Log, "Демон", "OK", "Старт опроса устройств." );
     //loop_state_t LoopStatus = LoopOk;
     
     script_option_t ScriptOption;
@@ -396,13 +400,14 @@ int __run_device_loop ( loop_state_t *LoopStatus, FILE *Log, const askue_cfg_t *
     MVar.LoopStatus = LoopStatus;
     MVar.ScriptOption = &ScriptOption;
     
-    return __foreach_device ( &MVar, &Input );
+    return __foreach_device ( &MVar, &Input, ACfg->Flag );
 }
 
 // цикл создания отчётов
 static
 int __run_report_loop ( loop_state_t *LoopStatus, FILE *Log, const askue_cfg_t *ACfg, const sigset_t *SignalSet )
 {
+    verbose_msg ( ACfg->Flag, Log, "Демон", "OK", "Старт создания отчётов." );
     script_option_t ScriptOption;
     __script_option_preset ( &ScriptOption, ACfg, SA_PRESET_REPORT );
     // переменные монитора
