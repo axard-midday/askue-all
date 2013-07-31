@@ -38,6 +38,8 @@ void write_msg ( FILE *output, const char *Hdr, const char *St, const char *Msg 
         fputs ( " ]\n" ,output );
         //fprintf ( output, "[ %s | %s | %s ]\n", asctime_str, Hdr, St );
     }
+    
+    fflush ( output );
 }
 
 #undef TIME_STRBUF

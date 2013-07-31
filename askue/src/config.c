@@ -5,9 +5,9 @@
 #include <libconfig.h>
 
 #include "config.h"
-#include "files.h"
 #include "write_msg.h"
 #include "my.h"
+#include "macro.h"
 
 /*                  Функции точки сбора конфигурации                  */
 
@@ -354,12 +354,13 @@ void __config_script ( char **ScriptName, char **ScriptParametr, const char *scr
     
     if ( Parametr != NULL )
     {
+        size_t len = (size_t)( (const char*) Parametr - (const char*)script );
+        *ScriptName = mystrndup ( script, len );
+        
         Parametr++;
         while ( *Parametr != '\0' && isspace ( *Parametr ) )
             Parametr++;
         *ScriptParametr = mystrdup ( Parametr );
-        size_t len = (size_t)( (const char*) Parametr - (const char*)script );
-        *ScriptName = mystrndup ( script, len );
     }
     else
     {
@@ -377,12 +378,13 @@ void __config_report ( char **ReportName, char **ReportParametr, const char *rep
     
     if ( Parametr != NULL )
     {
+        size_t len = (size_t)( (const char*) Parametr - (const char*)report );
+        *ReportName = mystrndup ( report, len );
+        
         Parametr++;
         while ( *Parametr != '\0' && isspace ( *Parametr ) )
             Parametr++;
         *ReportParametr = mystrdup ( Parametr );
-        size_t len = (size_t)( (const char*) Parametr - (const char*)report );
-        *ReportName = mystrndup ( report, len );
     }
     else
     {

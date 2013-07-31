@@ -7,6 +7,24 @@
 #include <stddef.h>
 
 /*
+ * Файлы
+ */
+#ifndef ASKUE_DEBUG
+
+    #define ASKUE_FILE_CONFIG           "/etc/askue/askue.cfg"
+    #define ASKUE_FILE_HELP             "/etc/askue/askue.help"
+    #define ASKUE_FILE_PID              "/var/askue.pid"
+    
+#else
+    
+    #define ASKUE_FILE_CONFIG           "/home/axard/workspace/Repos/askue-repo/askue/src/askue.cfg"
+    #define ASKUE_FILE_HELP             "/home/axard/workspace/Repos/askue-repo/askue/src/askue.help"
+    #define ASKUE_FILE_PID              "/home/axard/workspace/Repos/askue-repo/askue/src/askue.pid"
+
+#endif
+
+
+/*
  * ФЛАГИ
  */
 #define ASKUE_FLAG_VERBOSE 0

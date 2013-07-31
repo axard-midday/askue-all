@@ -1,6 +1,3 @@
-#ifndef _GNU_SOURCE
-    #define _GNU_SOURCE
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,29 +16,25 @@
 #include "macro.h"
 #include "log.h"
 #include "cli.h"
-
-typedef enum _askue_cfg_flag_t
-{
-    Askue_ReConfigure,
-    Askue_Configure
-} askue_cfg_flag_t;
+#include "text_buffer.h"
 
 /*                         Чтение конфигурации                        */
 static
-int askue_configure ( askue_cfg_t *Cfg, FILE **Log, askue_cfg_flag_t CfgFlag )
+int askue_configure ( askue_workspace_t *WS, askue_cfg_t *Cfg )
 {
-    if ( CfgFlag == Askue_ReConfigure )
-    {
-        askue_config_destroy ( Cfg );
-        askue_config_init ( Cfg );
-        askue_log_close ( Log );
-    }
+    uint32_t Flag = Cfg->Flag;
+    
+    askue_config_destroy ( Cfg );
+    askue_config_init ( Cfg );
+    askue_log_close ( &( WS->Log ) );
         
+    Cfg->Flag = Flag;
+    
     verbose_msg ( Cfg->Flag, stdout, "Конфигурация", "OK", "Инициализация" );
     
     if ( !askue_config_read ( Cfg ) &&
          !askue_journal_init ( Cfg ) &&
-         !askue_log_open ( Log, Cfg ) )
+         !askue_log_open ( &( WS->Log ), Cfg ) )
     {
         return 0;
     }
@@ -54,22 +47,29 @@ int askue_configure ( askue_cfg_t *Cfg, FILE **Log, askue_cfg_flag_t CfgFlag )
 
 /*                          Основной цикл программы                   */
 static
-loop_state_t main_loop ( askue_cfg_t *Cfg, FILE **Log, const sigset_t *SignalSet )
+int main_loop ( askue_workspace_t *WS, askue_cfg_t *Cfg )
 {
-    loop_state_t LS = LoopOk;
+    verbose_msg ( Cfg->Flag, WS->Log, "АСКУЭ", "OK", "Старт опроса." );
     
-    verbose_msg ( Cfg->Flag, Log, "Демон", "OK", "Старт опроса." );
-    while ( LS != LoopError && LS != LoopExit )
+    while ( WS->Loop == LoopOk )
     {
-        LS = run_monitor_loop ( *Log, Cfg, SignalSet );
-        if ( LS == LoopReconfig )
-            LS = ( askue_configure ( Cfg, Log, Askue_ReConfigure ) ) ? LoopError : LoopOk;
+        if ( run_monitor_loop ( WS, Cfg ) == -1 )
+            return -1;
             
-        if ( TESTBIT ( Cfg->Flag, ASKUE_FLAG_CYCLE ) )
-            break;
+        if ( WS->Loop == LoopReconfig )
+        {
+            if ( askue_configure ( WS, Cfg ) == -1 )
+            {
+                WS->Loop = LoopError;
+            }
+            else
+            {
+                WS->Loop = LoopOk;
+            }  
+        }
     }
     
-	return LS;
+	return ( WS->Loop == LoopError ) ? -1 : 0;
 }
 
 /*                   Установка отслеживаемых сигналов                 */
@@ -93,50 +93,43 @@ void signal_set_init ( sigset_t *sigset )
 
 /*                      Стать независимым от родителя                 */
 static
-int set_independent ( askue_cfg_t *Cfg, FILE *Log )
+int set_independent ( askue_workspace_t *WS, askue_cfg_t *Cfg )
 {
-    char Buffer[ 256 ];
     umask ( 0 );
     
-    if ( setsid ( ) != -1 &&
-         snprintf ( Buffer, 256, "setsid(): %s (%d)", strerror ( errno ), errno ) != -1)
+    if ( setsid () == -1 )
     {
-        write_log ( Log, "Демон", "FAIL", Buffer );
-        return -1
-    }
-    else
-    {
-        verbose_msg ( Cfg->Flag, Log, "Демон", "OK", "Новый сеанс создан." );
-    }
-    
-    if ( chdir ( "/" ) != -1 &&
-         snprintf ( Buffer, 256, "chdir(): %s (%d)", strerror ( errno ), errno ) != -1 )
-    {
-        write_log ( Log, "Демон", "FAIL", Buffer );
+        text_buffer_write ( WS->Buffer, "setsid(): %s (%d)", strerror ( errno ), errno );
+        write_msg ( WS->Log, "АСКУЭ", "FAIL", WS->Buffer->Text );
         return -1;
     }
     else
     {
-        verbose_msg ( Cfg->Flag, Log, "Демон", "OK", "Каталог сменён." );
+        verbose_msg ( Cfg->Flag, WS->Log, "АСКУЭ", "OK", "Новый сеанс создан." );
+    }
+    
+    if ( chdir ( "/home/axard/" ) == -1 )
+    {
+        text_buffer_write ( WS->Buffer, "chdir(): %s (%d)", strerror ( errno ), errno );
+        write_log ( WS->Log, "АСКУЭ", "FAIL", WS->Buffer->Text );
+        return -1;
+    }
+    else
+    {
+        verbose_msg ( Cfg->Flag, WS->Log, "АСКУЭ", "OK", "Каталог изменён." );
     }
     
     return 0;
 }
 
 /*                      Запуск аскуе                                  */
-int run_askue ( askue_cfg_t *Cfg, FILE **Log )
+int run_askue ( askue_workspace_t *WS, askue_cfg_t *Cfg )
 {
-    if ( set_independent ( *Log ) )
+    if ( set_independent ( WS, Cfg ) )
     {
         return -1;
     }
-            
-    sigset_t SignalSet;
-    signal_set_init ( &SignalSet );
-            
-    loop_state_t ls = main_loop ( Cfg, Log, ( const sigset_t* ) &SignalSet );
-    
-    return ( ls == LoopExit ) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return main_loop ( WS, Cfg );
 }
 
 /*      Отчёт об ошибках разбора аргументов командной строки          */
@@ -204,14 +197,50 @@ int __cli_protocol ( void *ptr, int *flag, const char *arg )
     return 0;
 } 
 
+/*                      Запись pid-файла                              */
+int create_pid_file ( pid_t pid )
+{
+    FILE *pidFile = fopen ( ASKUE_FILE_PID, "w" );
+    
+    char Buffer[ 256 ];
+    if ( pidFile == NULL )
+    {
+        snprintf ( Buffer, 256, "Ошибка создания pid-файла: %s ( %d )", strerror ( errno ), errno );
+        write_msg ( stdout, "АСКУЭ", "FAIL", Buffer );
+        return -1;
+    }
+    
+    fprintf ( pidFile, "%ld\n", ( long int ) pid );
+    
+    fclose ( pidFile );
+    
+    snprintf ( Buffer, 256, "Старт. Процесс с pid = %ld", ( long int ) pid );
+    write_msg ( stdout, "АСКУЭ", "OK", Buffer );
+    
+    return 0;
+}
+
 /*                      Точка входа в программу                       */
 int main ( int argc, char **argv )
 {
-    FILE *Log;
     askue_cfg_t Cfg;
     askue_config_init ( &Cfg );
-
-    write_msg ( stdout, "АСКУЭ", "OK", "Старт" );
+    
+    text_buffer_t Buffer;
+    text_buffer_init ( &Buffer, 512 );
+    
+    sigset_t SignalSet;
+    signal_set_init ( &SignalSet );
+    
+    script_argument_vector_t SArgV;
+    script_argument_init ( &SArgV, NULL, SA_PRESET_CLEAR );
+    
+    askue_workspace_t WS;
+    WS.Log = NULL;
+    WS.SignalSet = &SignalSet;
+    WS.ScriptArgV = &SArgV;
+    WS.Loop = LoopOk;
+    WS.Buffer = &Buffer;
  
     cli_option_t vOption[] =
     {
@@ -222,26 +251,38 @@ int main ( int argc, char **argv )
     };
     
     if ( !askue_cli_parse ( vOption, argc, argv ) &&
-         !askue_configure ( &Cfg, &Log, Askue_Configure ) )
+         !askue_configure ( &WS, &Cfg ) )
     {
-        
         char Buffer[ 256 ];
         pid_t pid = fork ();
         if ( pid < 0 )
         {
-            if ( snprintf ( Buffer, 256, "fork(): %s (%d)", strerror ( errno ), errno ) != -1 )
-                verbose_msg ( Cfg.Flag, stdout, "Демон", "FAIL", Buffer );
+            text_buffer_write ( WS.Buffer, "pid() = %s ( %d )", strerror ( errno ), errno );
+            verbose_msg ( Cfg.Flag, stdout, "АСКУЭ", "FAIL", WS.Buffer->Text );
             exit ( EXIT_FAILURE ); 
         }
         else if ( !pid )
         {
-            int exit_status = run_askue ( &Cfg, &Log );
-            askue_log_close ( &Log );
+            int exit_status = run_askue ( &WS, &Cfg );
+            
             askue_config_destroy ( &Cfg );
+            
+
+            if ( unlink ( ASKUE_FILE_PID ) == -1 )
+            {
+                text_buffer_write ( WS.Buffer, "Ошибка удаления pid-файла: %s ( %d )", strerror ( errno ), errno );
+                write_msg ( WS.Log, "АСКУЭ", "FAIL", WS.Buffer->Text );
+            }
+            
+            text_buffer_destroy ( WS.Buffer );
+            askue_log_close ( &( WS.Log ) );
+            
             exit ( exit_status );
         }
         else
         {
+            create_pid_file ( pid );
+            
             exit ( EXIT_SUCCESS );
         }
         

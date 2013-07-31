@@ -1,21 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#include <sys/wait.h>
-#include <sys/types.h>
-#include <signal.h>
-
-#include "write_msg.h"
-#include "sarg.h"
-#include "macro.h"
-#include "log.h"
-#include "workspace.h"
-#include "config.h"
 
 // найти модем с таким же id
-const gate_cfg_t* __find_remote_gate ( const gate_cfg_t ** GateList, long int Id )
+const gate_cfg_t* __find_remote_gate ( const gate_cfg_t **GateList, long int Id )
 {
     const gate_cfg_t *Gate = NULL;
     for ( size_t i = 0; GateList[ i ] != NULL && Gate == NULL; i++ )
@@ -39,7 +24,7 @@ void __exec_script ( askue_workspace_t *WS, const script_cfg_t *Script )
     // установка аргументов
     for ( int i = SA_FIRST, j = 0; i < SA_LAST && j < SA_LAST; i++ )
     {
-        if ( TESTBIT ( WS->ScriptArgV->Flag, i ) )
+        if ( WS->ScriptArgV->Flag && i )
         {
             Argv[ j ] = WS->ScriptArgV->Value[ i ];
         }
@@ -49,7 +34,7 @@ void __exec_script ( askue_workspace_t *WS, const script_cfg_t *Script )
     fclose ( WS->Log );
     
     // выполнить скрипт
-    if ( execvp ( Argv[ 0 ], ( char * const * ) Argv ) )
+    if ( execvp ( WS->ScriptArgV[ 0 ], ( char * const * ) Argv ) )
     {
         exit ( EXIT_FAILURE );
     }
@@ -64,13 +49,13 @@ int __wait_script_result ( askue_workspace_t *WS, const char *ScriptName, pid_t 
     if ( WaitpidReturn == -1 )
     {
         text_buffer_write ( WS->Buffer, "waitpid(): %s (%d)", strerror ( errno ), errno );
-        write_msg ( WS->Log, "АСКУЭ", "FAIL", WS->Buffer->Text );
+        write_msg ( WS->Log, "Демон", "FAIL", WS->Buffer );
         WS->Loop = LoopError;
         return -1;
     }
     else if ( WaitpidReturn == 0 )
     {
-        write_msg ( WS->Log, "АСКУЭ", "FAIL", "Ложный сигнал SIGCHLD" );
+        write_msg ( WS->Log, "Демон", "FAIL", "Ложный сигнал SIGCHLD" );
         WS->Loop = LoopError;
         return -1;
     }
@@ -81,14 +66,18 @@ int __wait_script_result ( askue_workspace_t *WS, const char *ScriptName, pid_t 
         if ( code != EXIT_SUCCESS )
         {
             text_buffer_write ( WS->Buffer, "Скрипт '%s' завершён с кодом: %d", ScriptName, code );
-            write_msg ( WS->Log, "АСКУЭ", "ERROR", WS->Buffer->Text );
+            write_msg ( WS->Log, "Демон", "FAIL", WS->Buffer );
+            WS->Loop = LoopError;
+            return -1;
         }
     }
     else if ( WIFSIGNALED ( status ) ) // завершение по внешнему сигналу
     {
         int sig = WTERMSIG ( status );
         text_buffer_write ( WS->Buffer, "Скрипт '%s' завершён по сигналу: %d", ScriptName, sig );
-        write_msg ( WS->Log, "АСКУЭ", "ERROR", WS->Buffer->Text );
+        write_msg ( WS->Log, "Демон", "FAIL", WS->Buffer );
+        WS->Loop = LoopError;
+        return -1;
     }
     
     WS->Loop = LoopOk;
@@ -104,7 +93,7 @@ int __wait_signal ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t 
     {
         // сообщение об ошибке
         text_buffer_write ( WS->Buffer, "sigwaitinfo(): %s (%d)", strerror ( errno ), errno );
-        write_msg ( WS->Log, "Сигнал", "ERROR", WS->Buffer->Text );
+        write_msg ( WS->Log, "Сигнал", "ERROR", WS->Buffer );
         WS->Loop = LoopError;
         return -1;
     }
@@ -157,35 +146,16 @@ void __verbose_say_about_child ( askue_workspace_t *WS, uint32_t Flag, pid_t pid
     if ( TESTBIT ( Flag, ASKUE_FLAG_VERBOSE ) )
     {
         text_buffer_write ( WS->Buffer, "Pid потомка: %ld", pid );
-        write_msg ( WS->Log, "АСКУЭ", "OK", WS->Buffer->Text );
+        write_msg ( WS->Log, "Демон", "OK", WS->Buffer );
     }
 }
 
 // сообщение об ошибке при запуске скрипта
 static
-void __run_script_error ( askue_workspace_t *WS )
+void __run_script_error ( askue_workspace_t *WS );
 { 
     text_buffer_write ( WS->Buffer, "fork(): %s (%d)", strerror ( errno ), errno );
-    write_msg ( WS->Log, "АСКУЭ", "FAIL", WS->Buffer->Text );
-}
-
-static 
-void __verbose_say_about_script ( askue_workspace_t *WS, uint32_t Flag )
-{
-    if ( TESTBIT ( Flag, ASKUE_FLAG_VERBOSE ) )
-    {
-        text_buffer_write ( WS->Buffer, "Запуск скрипта '%s' с параметрами:", WS->ScriptArgV->Value[ 0 ] );
-        
-        for ( int i = SA_FIRST + 1; i < SA_LAST; i++ )
-        {
-            if ( TESTBIT ( WS->ScriptArgV->Flag, i ) )
-            {
-                text_buffer_append ( WS->Buffer, " %s", WS->ScriptArgV->Value[ i ] );
-            }
-        }
-        
-        write_msg ( WS->Log, "АСКУЭ", "OK", WS->Buffer->Text );
-    }
+    write_msg ( WS->Log, "Демон", "FAIL", WS->Buffer );
 }
 
 // запуск скрипты
@@ -193,8 +163,6 @@ static
 int __run_script ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t Flag )
 {
     int Result;
-    __verbose_say_about_script ( WS, Flag );
-    
     pid_t ScriptPid = fork ();
     if ( ScriptPid < 0 )
     {
@@ -207,8 +175,8 @@ int __run_script ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t F
     }
     else
     {
-        //__verbose_say_about_child ( WS, Flag, ScriptPid ); 
-        Result = __wait_signal ( WS, Script, Flag, ScriptPid );
+        __verbose_say_about_child ( WS, Flag, ScriptPid ); 
+        Result = __wait_signal ( WS, Script, Flag ScriptPid );
     }
     
     return Result;
@@ -218,7 +186,7 @@ int __run_script ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t F
 static
 int __is_last_script ( const askue_workspace_t *WS, const script_cfg_t **SList, size_t si )
 {
-    return ( SList[ si ] == NULL ) &&
+    return ( SList[ si ] != NULL ) &&
             ( WS->Loop == LoopOk );
 }
 
@@ -227,8 +195,7 @@ static
 int __foreach_script ( askue_workspace_t *WS, const script_cfg_t **SList, uint32_t Flag )
 {
     int Result = 0;
-    
-    for ( size_t i = 0; !__is_last_script ( WS, SList, i ) && Result == 0; i++ )
+    for ( size_t i = 0; __is_last_script ( WS, SList, i ) && Result == 0; i++ )
     {
         script_argument_set ( WS->ScriptArgV, SA_NAME, SList[ i ]->Name );
         
@@ -239,8 +206,6 @@ int __foreach_script ( askue_workspace_t *WS, const script_cfg_t **SList, uint32
             
         Result =  __run_script ( WS, SList[ i ], Flag );
     }
-    
-    return Result;
 }
 
 
@@ -248,7 +213,7 @@ int __foreach_script ( askue_workspace_t *WS, const script_cfg_t **SList, uint32
 static
 int __is_last_device ( const askue_workspace_t *WS, const askue_cfg_t *Cfg, size_t i )
 {
-    return ( Cfg->DeviceList[ i ] == NULL ) &&
+    return ( Cfg->DeviceList[ i ] != NULL ) &&
             ( WS->Loop == LoopOk );
 }
 
@@ -259,7 +224,7 @@ void __verbose_say_about_device ( const askue_workspace_t *WS, const askue_cfg_t
     if ( TESTBIT ( Cfg->Flag, ASKUE_FLAG_VERBOSE ) )
     {
         text_buffer_write ( WS->Buffer, "Опрос устройства: '%s'", device );
-        write_msg ( WS->Log, "АСКУЭ", "OK", WS->Buffer->Text );
+        write_msg ( WS->Log, "Демон", "OK", WS->Buffer );
     }
 }
 
@@ -270,15 +235,12 @@ int __foreach_device ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
     int Result = 0;
     const gate_cfg_t *LastConnectedGate = NULL;
     
-    script_argument_init ( WS->ScriptArgV, Cfg, SA_PRESET_DEVICE );
-    
-    for ( size_t i = 0; !__is_last_device ( WS, Cfg, i) && Result == 0; i++ )
+    for ( size_t i = 0; __is_last_device ( WS, Cfg, i) && Result == 0; i++ )
     {        
-        script_cfg_t **ScriptList;
+        
         if ( Cfg->DeviceList[ i ]->Segment == Askue_Remote )
         {
-            gate_cfg_t **RemoteGateList = Cfg->RemoteGateList;
-            const gate_cfg_t *RemoteGate = __find_remote_gate ( ( const gate_cfg_t ** )RemoteGateList,
+            const gate_cfg_t *RemoteGate = __find_remote_gate ( Cfg->RemoteGateList,
                                                                  Cfg->DeviceList[ i ]->Id );
                                                                   
             if ( LastConnectedGate != RemoteGate )
@@ -289,30 +251,29 @@ int __foreach_device ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
                 {
                     __verbose_say_about_device ( WS, Cfg, RemoteGate->Device->Name );
                     
-                    script_argument_set ( WS->ScriptArgV, SA_DEVICE, RemoteGate->Device->Name );
-                    script_argument_set ( WS->ScriptArgV, SA_TIMEOUT, RemoteGate->Device->Timeout );
+                    script_argument_init ( WS->ScriptArgV, Cfg, SA_PRESET_DEVICE );
+                    script_argument_set ( WS->ScriptArgV, SA_DEVICE, RemoteGateList->Device->Name );
+                    script_argument_set ( WS->ScriptArgV, SA_TIMEOUT, RemoteGateList->Device->Timeout );
                     
-                    ScriptList = RemoteGate->Device->Type->Script;
+                    script_cfg_t **ScriptList = RemoteGate->Device->Type->Script;
                     
-                    Result = __foreach_script ( WS, ( const script_cfg_t ** ) ScriptList, Cfg->Flag );
+                    Result = __foreach_script ( WS, ScriptList, Cfg->Flag );
                 }
             }
         }
-        ScriptList = Cfg->DeviceList[ i ]->Type->Script;
+        
         __verbose_say_about_device ( WS, Cfg, Cfg->DeviceList[ i ]->Name );
-        script_argument_set ( WS->ScriptArgV, SA_DEVICE, Cfg->DeviceList[ i ]->Name );
-        script_argument_set ( WS->ScriptArgV, SA_TIMEOUT, Cfg->DeviceList[ i ]->Timeout );
-        Result = __foreach_script ( WS, ( const script_cfg_t ** ) ScriptList, Cfg->Flag );
+        Result = __foreach_script ( WS, Cfg, i );
     }
         
-    return Result;
+    return *( _Var->LoopStatus ) == LoopOk;
 }
 
 // цикл опроса устройств
 static
 int __run_device_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
 {
-    verbose_msg ( Cfg->Flag, WS->Log, "АСКУЭ", "OK", "Старт опроса устройств." );
+    verbose_msg ( Cfg->Flag, Log, "Демон", "OK", "Старт опроса устройств." );
     return __foreach_device ( WS, Cfg );
 }
 
@@ -347,7 +308,7 @@ int __foreach_report ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
 static
 int __run_report_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
 {
-    verbose_msg ( Cfg->Flag, WS->Log, "АСКУЭ", "OK", "Старт создания отчётов." );
+    verbose_msg ( ACfg->Flag, Log, "Демон", "OK", "Старт создания отчётов." );
     
     return __foreach_report ( WS, Cfg );
 }
@@ -355,7 +316,7 @@ int __run_report_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
 
 // условия работы цикла мониторинга
 static
-int __condition_monitor_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
+int __condition_monitor_loop ( askue_workspace_t WS, const askue_cfg_t *Cfg )
 {
     return ( __run_device_loop ( WS, Cfg ) == 0 ) && 
             ( __run_report_loop ( WS, Cfg ) == 0 );
@@ -363,11 +324,11 @@ int __condition_monitor_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
 
 // условие разрыва цикла мониторинга
 static
-int __condition_break_monitor_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
+int __condition_break_monitor_loop ( askue_workspace_t WS, const askue_cfg_t *Cfg )
 {
     if ( TESTBIT ( Cfg->Flag, ASKUE_FLAG_CYCLE ) )
     {
-        WS->Loop = LoopBreak;
+        *( WS->Loop ) = LoopBreak;
         return 0;
     }
     else
@@ -376,37 +337,37 @@ int __condition_break_monitor_loop ( askue_workspace_t *WS, const askue_cfg_t *C
 
 // вывод в лог сообщения об ошибке
 static
-void __say_break_reason ( const askue_workspace_t *WorkSpace )
+void __say_break_reson ( const askue_workspace_t *WorkSpace )
 {
     if ( WorkSpace->Loop == LoopError )
     {
-        write_msg ( WorkSpace->Log, "АСКУЭ", "FAIL", "Цикл опроса прерван в связи с ошибкой." );
+        write_msg ( WorkSpace->Log, "Демон", "FAIL", "Цикл опроса прерван в связи с ошибкой." );
     }    
     else if ( WorkSpace->Loop == LoopExit ) 
     {
-        write_msg ( WorkSpace->Log, "АСКУЭ", "OK", "Цикл опроса прерван в связи с сигналом завершения." );
+        write_msg ( WorkSpace->Log, "Демон", "OK", "Цикл опроса прерван в связи с сигналом завершения." );
     }
     else if ( WorkSpace->Loop == LoopReconfig )
     {
-        write_msg ( WorkSpace->Log, "АСКУЭ", "OK", "Цикл опроса прерван в связи с сигналом переконфигурации." );
+        write_msg ( WorkSpace->Log, "Демон", "OK", "Цикл опроса прерван в связи с сигналом переконфигурации." );
     }
     else if ( WorkSpace->Loop == LoopBreak )
     {
-        write_msg ( WorkSpace->Log, "АСКУЭ", "OK", "Цикл опроса прерван в связи с завершением итерации цикла." );
+        write_msg ( WorkSpace->Log, "Демон", "OK", "Цикл опроса прерван в связи с завершением цикла опроса." );
     }
 }
 
 // цикл сбора показаний
 // 0 - нормально завершение ( переконфигурация, сигнал )
 // -1 - ошибка
-int run_monitor_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
+int run_monitor_loop ( askue_workspace_t WS, const askue_cfg_t *Cfg )
 {
     int Result = 0;
     
-    while ( __condition_monitor_loop ( WS, Cfg ) &&
-             __condition_break_monitor_loop ( WS, Cfg ) );
+    while ( __condition_monitor_loop ( WS, ACfg ) &&
+             __condition_break_monitor_loop ( WS, ACfg ) );
     
     __say_break_reason ( WS );
     
-    return ( WS->Loop == LoopError ) ? -1 : 0;
+    return LoopStatus;
 }

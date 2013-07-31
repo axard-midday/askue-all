@@ -69,7 +69,7 @@ int main(int argc, char **argv)
 	}
     
     fprintf ( stderr, "[ %s | %s ]: %s\n", "Скрипт", "ОК", "Скрипт начал работу" );
-    sleep ( 15 );
+    sleep ( 5 );
     fprintf ( stderr, "[ %s | %s ]: %s\n", "Скрипт", "ОК", "Скрипт окончил работу" );
 	exit ( EXIT_SUCCESS );
 }

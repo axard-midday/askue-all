@@ -1,8 +1,12 @@
+#define _POSIX_SOURCE
+
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <signal.h>
 
-#include "files.h"
+#include "macro.h"
 
 static
 int is_equal_char ( char c1, char c2, int *Result )
@@ -42,33 +46,40 @@ int is_equal_str ( const char *str, const char *etalon )
     
 #define is_help( _STR_ ) \
     is_equal_str ( _STR_, "help" )
-    
+  
 static
-int say_ASKUE_pid ( void )
+int read_ASKUE_pid ( long int *pid )
 {
     FILE *PidFile;
     
     PidFile = fopen ( ASKUE_FILE_PID, "r" );
-    if ( PidFile == 0 )
+    if ( PidFile == NULL )
     {
         perror ( "Невозможно открыть '/var/askue.pid'." );
         return -1;
     }
     
-    unsigned int pid;
-    if ( fscanf ( PidFile, "%u", &pid ) != 1 )
+    if ( fscanf ( PidFile, "%ld\n", pid ) != 1 )
     {
         perror ( "Ошибка чтения pid из '/var/askue.pid'." );
         return -1;
     }
+    
+    return fclose ( PidFile );
+}
+    
+static
+int say_ASKUE_pid ( void )
+{
+    long int pid;
+    if ( !read_ASKUE_pid ( &pid ) )
+    {
+        return ( printf ( "АСКУЭ уже запущена. Процесс с pid = %ld\n", pid ) > 0 ) ? 0 : -1;
+    }
     else
     {
-        fprintf ( stdout, "PID процесса: %u\n", pid );
+        return -1;
     }
-
-    fclose ( PidFile );
-    
-    return 0;
 }
 
 static
@@ -78,28 +89,25 @@ int Start_ASKUE_proc ( int argc, char **argv, int argv_offset )
     int Exist = access ( ASKUE_FILE_PID, F_OK );
     if ( Exist == 0 )
     {
-        puts ( "АСКУЭ уже работает" );
         return say_ASKUE_pid ();
     }
     else if ( ( Exist == -1 ) && ( errno == ENOENT ) )
     {
-        if ( argc != 0 )
-            puts ( "Вызываю программу 'askue-main' с параметрами:" );
-        else
-            puts ( "Вызываю программу 'askue-main'." );
-            
-        for ( int i = 0; i < argc; i++ )
+        char Argv[ 5 ][ 512 ];
+        
+        if ( snprintf ( Argv[ 0 ], 512, "%s", "askue_main" ) <= 0 ) return -1;
+        
+        int Result = 0;
+        for ( int i = 0; i < 5 && Result == 0; i++ )
         {
-            puts ( argv[ i + argv_offset ] );
+            Result = ( snprintf ( Argv[ i + 1 ], 512, "%s", argv[ i + argv_offset ] ) > 0 ) ? 0 : -1;
         }
+        if ( Result ) return -1;
         
-        puts ( "Управление передано 'askue-main' с помощью execvp." );
-        
-        return 0;
+        return execvp ( Argv[ 0 ], ( char * const * ) Argv );
     }
     else
     {
-        perror ( "Невозможно открыть '/var/askue.pid'." );
         return -1;
     }
 }
@@ -107,10 +115,17 @@ int Start_ASKUE_proc ( int argc, char **argv, int argv_offset )
 static
 int Stop_ASKUE_proc ( void )
 {
-    puts ( "Читаю '/var/askue.pid'." );
-    puts ( "Посылаю сигнал 'SIGTERM' процессу 'askue-main'." );
-    puts ( "Отслеживаю наличие процесса..." );
-    puts ( "Процесс остановлен." );
+    long int pid;
+    if ( read_ASKUE_pid ( &pid ) )
+    {
+        return -1;
+    }
+    if ( kill ( ( pid_t ) pid, SIGTERM ) == -1 )
+    {
+        perror ( "Ошибка: Stop_ASKUE_proc(): kill()" );
+    }
+    /* TODO: поставить отслеживание завершения */
+    puts ( "Работа АСКУЭ завершена." );
     
     return 0;
 }
@@ -145,10 +160,18 @@ int Help_ASKUE_proc ( void )
 static
 int ReConfigure_ASKUE_proc ( void )
 {
-    puts ( "Читаю '/var/askue.pid'." );
-    puts ( "Посылаю сигнал 'SIGUSR1' процессу 'askue-main'." );
-    puts ( "Соединяю свой вывод с его..." );
-    puts ( "АСКУЭ переконфигурирована" );
+    long int pid;
+    if ( read_ASKUE_pid ( &pid ) )
+    {
+        return -1;
+    }
+    if ( kill ( ( pid_t ) pid, SIGUSR1 ) == -1 )
+    {
+        perror ( "Ошибка: ReConfigure_ASKUE_proc(): kill()" );
+        return -1;
+    }
+    puts ( "АСКУЭ переконфигурирована." );
+    
     return 0;
 }
 
