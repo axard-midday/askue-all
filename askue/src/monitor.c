@@ -29,7 +29,7 @@ const gate_cfg_t* __find_remote_gate ( const gate_cfg_t ** GateList, long int Id
 
 // Выполнение скрипта
 static
-void __exec_script ( askue_workspace_t *WS, const script_cfg_t *Script )
+void __exec_script ( askue_workspace_t *WS )
 {
     char *Argv[ SA_AMOUNT ];
     
@@ -42,22 +42,26 @@ void __exec_script ( askue_workspace_t *WS, const script_cfg_t *Script )
         if ( TESTBIT ( WS->ScriptArgV->Flag, i ) )
         {
             Argv[ j ] = WS->ScriptArgV->Value[ i ];
+            j++;
         }
     }
     
     // не факт что на лог стоит COE
-    fclose ( WS->Log );
-    
+    //fclose ( WS->Log );
+    Argv[ 0 ] = "/home/axard/workspace/Repos/askue-repo/askue/src/test_script";
     // выполнить скрипт
     if ( execvp ( Argv[ 0 ], ( char * const * ) Argv ) )
     {
+        text_buffer_write ( WS->Buffer, "execvp(): %s (%d)", strerror ( errno ), errno );
+        write_msg ( WS->Log, "Скрипт", "FAIL", WS->Buffer->Text );
+        //kill ( 0, SIGCHLD );
         exit ( EXIT_FAILURE );
     }
 }
 
 // проверить результат выполнения скрипта
 static
-int __wait_script_result ( askue_workspace_t *WS, const char *ScriptName, pid_t pid )
+int __wait_script_result ( askue_workspace_t *WS, pid_t pid )
 {
     int status;
     pid_t WaitpidReturn = waitpid ( pid, &status, WNOHANG );
@@ -71,8 +75,9 @@ int __wait_script_result ( askue_workspace_t *WS, const char *ScriptName, pid_t 
     else if ( WaitpidReturn == 0 )
     {
         write_msg ( WS->Log, "АСКУЭ", "FAIL", "Ложный сигнал SIGCHLD" );
+        //if ( kill ( pid, SIGTERM ) ) write_msg ( WS->Log, "Сигнал", "ERROR", "kill()" );
         WS->Loop = LoopError;
-        return -1;
+        return 0;
     }
     
     if ( WIFEXITED ( status ) ) // успешное завершение, т.е. через exit или return
@@ -80,14 +85,14 @@ int __wait_script_result ( askue_workspace_t *WS, const char *ScriptName, pid_t 
         int code = WEXITSTATUS ( status );
         if ( code != EXIT_SUCCESS )
         {
-            text_buffer_write ( WS->Buffer, "Скрипт '%s' завершён с кодом: %d", ScriptName, code );
+            text_buffer_write ( WS->Buffer, "Скрипт '%s' завершён с кодом: %d", WS->ScriptArgV->Value[ 0 ], code );
             write_msg ( WS->Log, "АСКУЭ", "ERROR", WS->Buffer->Text );
         }
     }
     else if ( WIFSIGNALED ( status ) ) // завершение по внешнему сигналу
     {
         int sig = WTERMSIG ( status );
-        text_buffer_write ( WS->Buffer, "Скрипт '%s' завершён по сигналу: %d", ScriptName, sig );
+        text_buffer_write ( WS->Buffer, "Скрипт '%s' завершён по сигналу: %d", WS->ScriptArgV->Value[ 0 ], sig );
         write_msg ( WS->Log, "АСКУЭ", "ERROR", WS->Buffer->Text );
     }
     
@@ -95,11 +100,9 @@ int __wait_script_result ( askue_workspace_t *WS, const char *ScriptName, pid_t 
     return 0;
 }
 
-// обработать сигнал
-int __wait_signal ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t Flag, pid_t pid )
+int __wait_signal ( askue_workspace_t *WS, uint32_t Flag, pid_t pid )
 {
     siginfo_t SignalInfo;
-    
     if ( sigwaitinfo ( WS->SignalSet, &SignalInfo ) == -1 )
     {
         // сообщение об ошибке
@@ -115,7 +118,7 @@ int __wait_signal ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t 
         {
             case SIGCHLD:
             
-                Result = __wait_script_result ( WS, Script->Name, pid );
+                Result = __wait_script_result ( WS, pid );
                 break;
                 
             case SIGUSR1:
@@ -125,7 +128,7 @@ int __wait_signal ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t 
                 if ( TESTBIT ( Flag, ASKUE_FLAG_VERBOSE ) )
                     write_msg ( WS->Log, "Сигнал", "OK", "Выполнить переконфигурацию" );
                 WS->Loop = LoopReconfig;
-                Result = -1;
+                Result = __wait_script_result ( WS, pid );
                 break;
                 
             case SIGTERM:
@@ -148,6 +151,18 @@ int __wait_signal ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t 
         }
         return Result;
     }
+}
+
+// обработать сигнал
+int __wait_signal_loop ( askue_workspace_t *WS, uint32_t Flag, pid_t pid )
+{
+    int Result;
+    while ( ( ( Result = __wait_signal ( WS, Flag, pid ) ) == 0 ) &&
+             ( WS->Loop == LoopError ) )
+    {
+        WS->Loop = LoopOk;
+    }
+    return Result;
 }
 
 // сообщить о pid процесса-потомка
@@ -190,7 +205,7 @@ void __verbose_say_about_script ( askue_workspace_t *WS, uint32_t Flag )
 
 // запуск скрипты
 static
-int __run_script ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t Flag )
+int __run_script ( askue_workspace_t *WS, uint32_t Flag )
 {
     int Result;
     __verbose_say_about_script ( WS, Flag );
@@ -203,12 +218,12 @@ int __run_script ( askue_workspace_t *WS, const script_cfg_t *Script, uint32_t F
     }
     else if ( ScriptPid == 0 )
     {
-        __exec_script ( WS, Script );
+        __exec_script ( WS );
     }
     else
     {
         //__verbose_say_about_child ( WS, Flag, ScriptPid ); 
-        Result = __wait_signal ( WS, Script, Flag, ScriptPid );
+        Result = __wait_signal_loop ( WS, Flag, ScriptPid );
     }
     
     return Result;
@@ -230,14 +245,16 @@ int __foreach_script ( askue_workspace_t *WS, const script_cfg_t **SList, uint32
     
     for ( size_t i = 0; !__is_last_script ( WS, SList, i ) && Result == 0; i++ )
     {
+        // имя
         script_argument_set ( WS->ScriptArgV, SA_NAME, SList[ i ]->Name );
         
+        // параметр
         if ( SList[ i ]->Parametr != NULL )
             script_argument_set ( WS->ScriptArgV, SA_PARAMETR, SList[ i ]->Parametr );
         else
             script_argument_unset ( WS->ScriptArgV, SA_PARAMETR );
             
-        Result =  __run_script ( WS, SList[ i ], Flag );
+        Result =  __run_script ( WS, Flag );
     }
     
     return Result;
@@ -328,6 +345,7 @@ static
 int __foreach_report ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
 {
     int Result = 0;
+    // начальные настройки ( будут для всех скриптов формирующих отчёты )
     script_argument_init ( WS->ScriptArgV, Cfg, SA_PRESET_REPORT );
     for ( size_t i = 0; __is_last_report ( WS, Cfg, i ) && Result == 0; i++ )
     {
@@ -336,8 +354,14 @@ int __foreach_report ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
         {
             script_argument_set ( WS->ScriptArgV, SA_PARAMETR, Cfg->ReportList[ i ]->Parametr );
         }
+        else
+        {
+            script_argument_unset ( WS->ScriptArgV, SA_PARAMETR ); 
+        }
+        // установить имя
+        script_argument_set ( WS->ScriptArgV, SA_NAME, Cfg->ReportList[ i ]->Name );
         
-        Result = __run_script ( WS, (script_cfg_t*) ( Cfg->ReportList[ i ] ), Cfg->Flag );
+        Result = __run_script ( WS, Cfg->Flag );
     }
 
     return Result;

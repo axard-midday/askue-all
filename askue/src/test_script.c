@@ -35,42 +35,22 @@
 #include <sys/types.h>
 #include <signal.h>
 
-static void hdl (int sig, siginfo_t *siginfo, void *context)
-//static void hdl (int sig)
+void hndl_sigterm ( int s )
 {
-    //if ( sig == SIGTERM )
-    //{
-        fprintf ( stderr, "[ %s | %s ]: %s\n", "Сигнал скрипта", "ОК", "Скрипт завершён по сигналу" );
-        exit ( EXIT_SUCCESS );
-    //}
-    //else
-    //{
-    //    write_log ( stderr, "Сигнал скрипта", "ERROR", "Ошибка" );
-    //}
+    fprintf ( stderr, "[ %s | %s ]: %s\n", "Скрипт", "ОК", "Пришёл сигнал SIGTERM" );
+    kill ( 0, SIGCHLD );
+    exit ( EXIT_SUCCESS + 2 );
 }
-
 
 int main(int argc, char **argv)
 {
-    //signal ( SIGTERM, hdl );
-    
-    setpgrp();
-    struct sigaction act;
- 
-	memset (&act, '\0', sizeof(act));
- 
-	act.sa_sigaction = &hdl;
- 
-	act.sa_flags = SA_SIGINFO;
- 
-	if (sigaction(SIGUSR2, &act, NULL) < 0) {
-		fprintf ( stderr, "[ %s | %s ]: %s\n", "Скрипт", "FAIL", "sigaction()" );
-		exit ( EXIT_FAILURE );
-	}
+    //signal_set_init();
+    signal ( SIGUSR2, hndl_sigterm );
     
     fprintf ( stderr, "[ %s | %s ]: %s\n", "Скрипт", "ОК", "Скрипт начал работу" );
-    sleep ( 5 );
+    sleep ( 15 );
     fprintf ( stderr, "[ %s | %s ]: %s\n", "Скрипт", "ОК", "Скрипт окончил работу" );
+    
 	exit ( EXIT_SUCCESS );
 }
 

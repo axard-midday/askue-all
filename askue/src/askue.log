@@ -1,61 +1,13 @@
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Новый сеанс создан.
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Каталог изменён.
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Старт опроса.
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Старт опроса устройств.
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '234'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'tm_profile' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=234 --parametr=get_lost --timeout=5000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'tm_profile' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'tm_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=234 --parametr=1 2 --timeout=5000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'tm_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '333'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'synchonize' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=333 --timeout=600 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'synchonize' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=333 --timeout=600 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=333 --timeout=600 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_profile' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '893'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'synchonize' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=893 --timeout=2000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'synchonize' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=893 --timeout=2000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=893 --timeout=2000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_profile' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '4200'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'connect' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=4200 --parametr=4100 --timeout=2000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'connect' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '111'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'tm_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=111 --timeout=1000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'tm_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'synchonize' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=111 --timeout=1000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'synchonize' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '4300'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'connect' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=4300 --parametr=4100 --timeout=2000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'connect' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '15'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'tm_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=15 --timeout=500 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'tm_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'synchonize' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=15 --timeout=500 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'synchonize' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '23'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'synchonize' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=23 --timeout=3000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'synchonize' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=23 --timeout=3000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=23 --timeout=3000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_profile' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Опрос устройства: '74'
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'synchonize' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=74 --timeout=4000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'synchonize' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=74 --timeout=4000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_energy' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=74 --timeout=4000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'ta_profile' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Старт создания отчётов.
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --parametr=week --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'dfl' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --parametr=week --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'dtl' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Запуск скрипта 'ta_profile' с параметрами: --parametr=day0 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
-[ 2013-07-31 16:40:10 | АСКУЭ | ERROR ]: Скрипт 'counter_tmta' завершён с кодом: 1
-[ 2013-07-31 16:40:10 | АСКУЭ | OK ]: Цикл опроса прерван в связи с завершением итерации цикла.
+[ 2013-08-01 15:11:03 | АСКУЭ | OK ]: Новый сеанс создан.
+[ 2013-08-01 15:11:03 | АСКУЭ | OK ]: Каталог изменён.
+[ 2013-08-01 15:11:03 | АСКУЭ | OK ]: Старт опроса.
+[ 2013-08-01 15:11:03 | АСКУЭ | OK ]: Старт опроса устройств.
+[ 2013-08-01 15:11:03 | АСКУЭ | OK ]: Опрос устройства: '234'
+[ 2013-08-01 15:11:03 | АСКУЭ | OK ]: Запуск скрипта 'tm_profile' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=234 --parametr=get_lost --timeout=5000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
+[ 2013-08-01 15:11:08 | Сигнал | OK ]: Выполнить переконфигурацию
+[ 2013-08-01 15:11:08 | АСКУЭ | FAIL ]: Ложный сигнал SIGCHLD
+[ 2013-08-01 15:11:08 | АСКУЭ | FAIL ]: Ложный сигнал SIGCHLD
+[ 2013-08-01 15:11:08 | АСКУЭ | ERROR ]: Скрипт 'tm_profile' завершён с кодом: 2
+[ 2013-08-01 15:11:08 | АСКУЭ | OK ]: Запуск скрипта 'tm_energy' с параметрами: --port_file=/dev/ttyS1 --port_parity=no --port_dbits=8 --port_sbits=1 --port_speed=9600 --device=234 --parametr=1 2 --timeout=5000 --journal_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.db.sqlite3 --journal_flashback=0 --log_file=/home/axard/workspace/Repos/askue-repo/askue/src/askue.log --verbose
+[ 2013-08-01 15:11:14 | Сигнал | OK ]: Завершить работу АСКУЭ
+[ 2013-08-01 15:11:14 | АСКУЭ | OK ]: Цикл опроса прерван в связи с сигналом завершения.

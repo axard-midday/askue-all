@@ -189,7 +189,7 @@ int askue_journal_init ( askue_cfg_t *ACfg )
          !__init_tbl ( DB, SQL_CRT_LOG_TBL, SQL_CRT_LOG_ID, init_log_tbl, ACfg ) &&
          !__init_tbl ( DB, SQL_CRT_CNT_TBL, SQL_CRT_CNT_ID, init_cnt_tbl, ACfg ) )
     {
-        verbose_msg ( ACfg->Flag, stdout, "Журнал", "OK", "Инициализация успешно завршена." );
+        verbose_msg ( ACfg->Flag, stdout, "Журнал", "OK", "Инициализация успешно завершена." );
         Result = 0;
     }
     else

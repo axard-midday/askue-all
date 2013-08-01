@@ -52,6 +52,7 @@ int read_ASKUE_pid ( long int *pid )
 {
     FILE *PidFile;
     
+    printf ( "открываю %s\n", ASKUE_FILE_PID );
     PidFile = fopen ( ASKUE_FILE_PID, "r" );
     if ( PidFile == NULL )
     {
@@ -82,6 +83,26 @@ int say_ASKUE_pid ( void )
     }
 }
 
+
+// Добавит параметры
+static
+void init_argv ( char **dest, char **src, size_t dest_amount, size_t src_amount, size_t offset )
+{
+    int j = 0;
+    for ( int i = 1; i < dest_amount; i++ )
+    {
+        if ( j < src_amount )
+        {
+            dest[ i ] = src[ j + offset ]; 
+            j++;
+        }
+        else
+        {
+            dest[ i ] = NULL;
+        }
+    }
+}
+
 static
 int Start_ASKUE_proc ( int argc, char **argv, int argv_offset )
 {
@@ -93,18 +114,20 @@ int Start_ASKUE_proc ( int argc, char **argv, int argv_offset )
     }
     else if ( ( Exist == -1 ) && ( errno == ENOENT ) )
     {
-        char Argv[ 5 ][ 512 ];
+        #define ARGV_AMOUNT 5
+        char *Argv[ ARGV_AMOUNT ];
         
-        if ( snprintf ( Argv[ 0 ], 512, "%s", "askue_main" ) <= 0 ) return -1;
-        
-        int Result = 0;
-        for ( int i = 0; i < 5 && Result == 0; i++ )
-        {
-            Result = ( snprintf ( Argv[ i + 1 ], 512, "%s", argv[ i + argv_offset ] ) > 0 ) ? 0 : -1;
-        }
-        if ( Result ) return -1;
-        
-        return execvp ( Argv[ 0 ], ( char * const * ) Argv );
+        // Обнулить и добавить параметры
+        init_argv ( Argv, argv, ARGV_AMOUNT, argc, argv_offset );
+        // имя вызываемой программы
+        #ifndef ASKUE_DEBUG
+            Argv[ 0 ] = "askue-main";
+        #else
+            Argv[ 0 ] = "./main";
+        #endif
+
+        return execvp ( Argv[ 0 ], ( char * const * )Argv );
+        #undef ARGV_AMOUNT
     }
     else
     {
@@ -236,3 +259,10 @@ int main(int argc, char **argv)
     }
 }
 
+#undef ReStart_ASKUE_proc
+#undef is_start
+#undef is_stop
+#undef is_restart
+#undef is_reconfigure
+#undef is_askue_arg
+#undef is_help
