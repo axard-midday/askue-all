@@ -71,9 +71,16 @@ typedef struct _script_arg_t
     parametr_arg_t Parametr;
 } script_arg_t;
 
-typedef struct _script_cfg_t
+typedef struct _askue_port_t
 {
-    FILE *Port;
+    int RS232;
+    FILE *In;
+    FILE *Out;
+} askue_port_t;
+
+typedef struct _script_enviroment_t
+{
+    askue_port_t *Port;
     FILE *Log;
     FILE *Protocol;
     sqlite3 *Journal;
@@ -154,9 +161,18 @@ void SignalHandler ( int s )
  */
 
 
-StartScript ( argc, argv )
+BeginScript ( Env, argc, argv, parametr_get )
+    
+    ScriptBody ( Env );
+    
+EndScript ( Env )
 
-    InitScriptCfg ( Cfg );
+
+BeginScriptBody ( Env )
+    Env->
+EndScriptBody ( Result )
+    
+    
     
     // ConfigScript ( Cfg, argc, argv, ParametrDecode );
     

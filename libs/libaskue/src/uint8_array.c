@@ -6,9 +6,17 @@
 
 void uint8_array_init ( uint8_array_t *u8a, size_t size )
 {
-    u8a->Item = ( uint8_t* ) mymalloc ( sizeof ( uint8_t ) * size );
-    u8a->Size = size;
-    memset ( u8a->Item, 0, size );
+    if ( size > 0 )
+    {
+        u8a->Item = ( uint8_t* ) mymalloc ( sizeof ( uint8_t ) * size );
+        u8a->Size = size;
+        memset ( u8a->Item, 0, size );
+    }
+    else
+    {
+        u8a->Size = 0;
+        u8a->Item = NULL;
+    }
 }
 
 void uint8_array_destroy ( uint8_array_t* ptr )
@@ -19,10 +27,20 @@ void uint8_array_destroy ( uint8_array_t* ptr )
 void uint8_array_resize ( uint8_array_t* ptr, size_t size )
 {
     if ( ptr == NULL )
+    {
         return;
-        
-    ptr->Item = myrealloc ( ptr->Item, size );
-    ptr->Size = size;
+    }
+    else if ( size > 0 )
+    {
+        ptr->Item = myrealloc ( ptr->Item, size );
+        ptr->Size = size;
+    }
+    else
+    {
+        myfree ( ptr->Item );
+        ptr->Size = 0;
+        ptr->Item = NULL;
+    }
 }
 
 void uint8_array_append ( uint8_array_t* Dest, const uint8_t *Data, size_t DataSize )
