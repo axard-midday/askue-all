@@ -169,7 +169,7 @@ EndScript ( Env )
 
 
 BeginScriptBody ( Env )
-    Env->
+    
 EndScriptBody ( Result )
     
     

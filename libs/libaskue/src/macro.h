@@ -1,9 +1,3 @@
-/*
- * common_macro.h
- *
- *  Created on: 05.12.2012
- *      Author: andrey
- */
 
 #ifndef ASKUE_MACRO_H
 #define ASKUE_MACRO_H
@@ -11,6 +5,38 @@
 
 #include <stdint.h>
 #include <stddef.h>
+
+/*
+ * Файлы
+ */
+#ifndef ASKUE_DEBUG
+
+    #define ASKUE_FILE_CONFIG           "/etc/askue/askue.cfg"
+    #define ASKUE_FILE_HELP             "/etc/askue/askue.help"
+    #define ASKUE_FILE_PID              "/var/askue.pid"
+    
+#else
+    
+    #define ASKUE_FILE_CONFIG           "/home/axard/workspace/Repos/askue-repo/askue/src/askue.cfg"
+    #define ASKUE_FILE_HELP             "/home/axard/workspace/Repos/askue-repo/askue/src/askue.help"
+    #define ASKUE_FILE_PID              "/home/axard/workspace/Repos/askue-repo/askue/src/askue.pid"
+
+#endif
+
+
+/*
+ * ФЛАГИ
+ */
+#define ASKUE_FLAG_VERBOSE 0
+#define ASKUE_FLAG_CYCLE 1
+#define ASKUE_FLAG_PROTOCOL 2
+
+/*
+ * Сигналы
+ */
+#define EXIT_BYSIGNAL 2
+#define EXIT_FAILURE_SENV_INIT 3
+#define EXIT_FAILURE_SENV_DESTROY 4
 
 /*
  * СТРОКОВЫЕ БУФЕРЫ

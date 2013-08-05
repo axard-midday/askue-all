@@ -5,6 +5,8 @@
 #include <ctype.h>
 #include <string.h>
 
+#include "cli.h"
+
 // выделить длинную опцию
 static
 size_t cli_get_long_option_len ( const char *argv )

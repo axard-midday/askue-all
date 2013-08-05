@@ -9,6 +9,7 @@
 #define ASKUE_CHECKSUM_H_
 
 #include <stdint.h>
+#include <stdlib.h>
 
 uint16_t checksum_crc16 ( const uint8_t *data, size_t len );
 
