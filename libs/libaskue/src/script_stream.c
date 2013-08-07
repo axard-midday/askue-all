@@ -9,4 +9,5 @@ script_stream_new ( script_stream_t **ScriptStream )
 script_stream_new ( script_stream_t *ScriptStream )
 {
     myfree ( ScriptStream );
+    // тест
 }
