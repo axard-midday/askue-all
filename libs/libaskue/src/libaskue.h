@@ -6,6 +6,7 @@
 #include <libaskue/script_enviroment.h>
 #include <libaskue/sprintf_datetime.h>
 #include <libaskue/uint8_array.h>
+#include <libaskue/write_msg.h>
 #include <libaskue/checksum.h>
 #include <libaskue/my.h>
 #include <libaskue/macro.h>
