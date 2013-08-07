@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <libaskue.h>
 
 #include "config.h"
-#include "write_msg.h"
 
 // открыть временный лог
 // сюда копируются остатки от обрезания

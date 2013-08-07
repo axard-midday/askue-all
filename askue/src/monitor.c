@@ -1,3 +1,4 @@
+#include <libaskue.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,9 +8,7 @@
 #include <sys/types.h>
 #include <signal.h>
 
-#include "write_msg.h"
 #include "sarg.h"
-#include "macro.h"
 #include "log.h"
 #include "workspace.h"
 #include "config.h"
@@ -428,7 +427,8 @@ int run_monitor_loop ( askue_workspace_t *WS, const askue_cfg_t *Cfg )
     int Result = 0;
     
     while ( __condition_monitor_loop ( WS, Cfg ) &&
-             __condition_break_monitor_loop ( WS, Cfg ) );
+             __condition_break_monitor_loop ( WS, Cfg ) &&
+             !askue_log_cut ( &(WS->Log), Cfg ) );
     
     __say_break_reason ( WS );
     

@@ -3,11 +3,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <libconfig.h>
+#include <libaskue.h>
 
 #include "config.h"
-#include "write_msg.h"
-#include "my.h"
-#include "macro.h"
 
 /*                  Функции точки сбора конфигурации                  */
 

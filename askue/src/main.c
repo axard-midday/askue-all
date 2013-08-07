@@ -8,14 +8,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <libaskue.h>
 
 #include "config.h"
 #include "monitor.h"
-#include "write_msg.h"
 #include "journal.h"
-#include "macro.h"
 #include "log.h"
-#include "cli.h"
 #include "text_buffer.h"
 
 /*                         Чтение конфигурации                        */
@@ -223,6 +221,7 @@ int create_pid_file ( pid_t pid )
 /*                      Точка входа в программу                       */
 int main ( int argc, char **argv )
 {
+    
     askue_cfg_t Cfg;
     askue_config_init ( &Cfg );
     

@@ -1,9 +1,9 @@
+#include <libaskue.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
 
 #include "text_buffer.h"
-#include "my.h"
 
 void text_buffer_init ( text_buffer_t *Buffer, size_t size )
 {

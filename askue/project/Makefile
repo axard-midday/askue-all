@@ -1,26 +1,38 @@
 # 
-# Сборка для libaskue 0.0.1
+# Сборка для askue-main
 #
 
-project_name := askue_launcher
-source_dirs := . 
+project_name := askue-main
+source_dirs := ../src
+dest_dir := ../bin
 
-source_dirs := $(addprefix ../../src/, $(source_dirs))
 source_files := $(wildcard $(addsuffix /*.c, $(source_dirs)))
-	
+
 object_files := $(notdir $(source_files))
 object_files := $(object_files:.c=.o)
 
-link_flags := -lconfig -laskue -lsqlite3
+link_flags := -lsqlite3 -lconfig 
+compile_flags := -std=c99 
 
-$(project_name): $(object_files)
-	gcc $^ -o $(project_name) -pipe -L/usr/local/lib/ $(link_flags)
+CC := gcc-3.4
+
+output := $(addprefix $(dest_dir), $(project_name) )
+output := $(addsuffix .so., $(project_name))
+
+all: $(project_name) Clean_Object_Files Move_BinDir
+
+Move_BinDir:
+	mv $(output) $(addsuffix $(output), $(addsuffix /, $(dest_dir)))
+
+Clean_Object_Files:
 	rm *.o
-	strip -s $(project_name)
+	
+$(project_name): $(object_files)
+	$(CC) $^ -o $(output) -pipe $(link_flags)
 
-%.o:%.c
-	gcc $^ -c $(compile_flags) -O2 -pipe 2>log
+%.o:%.c 
+	$(CC) $^ -c $(compile_flags) $(addprefix -I, $(source_dirs)) -pipe 
 	
 VPATH := $(source_dirs)
 
-include $(wildcard *.d)
+.PHONY: all Clean_Object_Files Move_BinDir

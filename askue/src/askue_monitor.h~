@@ -1,6 +1,0 @@
-#ifndef ASKUE_LAUNCHER_MONITOR_H_
-#define ASKUE_LAUNCHER_MONITOR_H_
-
-bool_t askue_monitor ( void );
-
-#endif /* ASKUE_LAUNCHER_MONITOR_H_ */

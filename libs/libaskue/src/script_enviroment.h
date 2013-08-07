@@ -1,12 +1,13 @@
-#ifndef SCRIPT_ENVIRPMENT_H_
-#define SCRIPT_ENVIRPMENT_H_
+#ifndef ASKUE_SCRIPT_ENVIRPMENT_H_
+#define ASKUE_SCRIPT_ENVIRPMENT_H_
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <sqlite3.h>
 
 #include "port.h"
 
-typedef struct _script_enviroment_t
+typedef struct _script_env_t
 {
     askue_port_t *Port;
     FILE *Log;
@@ -16,12 +17,18 @@ typedef struct _script_enviroment_t
     uint32_t Timeout;
     void *Parametr;
     uint32_t Flag;
-} script_enviroment_t;
+} script_env_t;
+
+// выделить память под окружение
+void script_env_new ( script_env_t **Env );
 
 // инициализация окружения
-int script_env_init ( script_enviroment_t *Env, int argc, char **argv, void* ( get_param ) ( const char * ) );
+int script_env_init ( script_env_t *Env, int argc, char **argv, void* ( get_param ) ( const char * ) );
 
 // удаление окружения
-void script_env_destroy ( script_enviroment_t *Env );
+void script_env_destroy ( script_env_t *Env );
 
-#endif /* SCRIPT_ENVIRPMENT_H_ */
+// очистить память выделенную под окружение
+void script_env_delete ( script_env_t *Env );
+
+#endif /* ASKUE_SCRIPT_ENVIRPMENT_H_ */

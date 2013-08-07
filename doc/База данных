@@ -1,0 +1,17 @@
+Таблица с показаниями:
+
+reg_tbl 
+{
+  Device		integer; *
+  Value			real; 
+  Type			text; *
+  Time			text; *
+  Date			text; *
+};
+
+Таблица с устройствами:
+dev_tbl
+{
+  Device		integer; *
+  Type			text;
+};
