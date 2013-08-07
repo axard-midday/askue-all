@@ -13,7 +13,7 @@
 
 // прединициализация окружения
 static 
-void __first_init ( script_enviroment_t *Env )
+void __first_init ( script_env_t *Env )
 {
     Env->Port->RS232 = -1;
     Env->Port->In = NULL;
@@ -29,7 +29,7 @@ void __first_init ( script_enviroment_t *Env )
 
 // инициализировать порт
 static
-int __port_init ( script_enviroment_t *Env, const script_arg_t *Arg )
+int __port_init ( script_env_t *Env, const script_arg_t *Arg )
 {
     // настроить порт
     askue_port_cfg_t PortCfg;
@@ -50,7 +50,7 @@ int __port_init ( script_enviroment_t *Env, const script_arg_t *Arg )
 
 // инициализировать лог
 static
-int __log_init ( script_enviroment_t *Env, const script_arg_t *Arg )
+int __log_init ( script_env_t *Env, const script_arg_t *Arg )
 {
     Env->Log = fopen ( Arg->Log->File, "a" );
     if ( Env->Log == NULL )
@@ -65,7 +65,7 @@ int __log_init ( script_enviroment_t *Env, const script_arg_t *Arg )
 
 // инициализировать журнал
 static
-int __journal_init ( script_enviroment_t *Env, const script_arg_t *Arg )
+int __journal_init ( script_env_t *Env, const script_arg_t *Arg )
 {
     if ( sqlite3_open ( Arg->Journal->File, &(Env->Journal) ) != SQLITE_OK )
     {
@@ -78,7 +78,7 @@ int __journal_init ( script_enviroment_t *Env, const script_arg_t *Arg )
 }
 
 static
-void __integer_params_init ( script_enviroment_t *Env, const script_arg_t *Arg )
+void __integer_params_init ( script_env_t *Env, const script_arg_t *Arg )
 {
     // получить номер устройства
     Env->Device = ( uint32_t ) strtoul ( Arg->Device->Name, NULL, 10 );

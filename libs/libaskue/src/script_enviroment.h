@@ -6,6 +6,7 @@
 #include <sqlite3.h>
 
 #include "port.h"
+#include "script_argument.h"
 
 typedef struct _script_env_t
 {
@@ -23,10 +24,10 @@ typedef struct _script_env_t
 void script_env_new ( script_env_t **Env );
 
 // инициализация окружения
-int script_env_init ( script_env_t *Env, int argc, char **argv, void* ( get_param ) ( const char * ) );
+int script_env_init ( script_env_t *Env, const script_arg_t *Arg, void* ( get_param ) ( const char * ) );
 
 // удаление окружения
-void script_env_destroy ( script_env_t *Env );
+void script_env_destroy ( script_env_t *Env, void (*destroy_param) (void*) );
 
 // очистить память выделенную под окружение
 void script_env_delete ( script_env_t *Env );

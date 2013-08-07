@@ -52,17 +52,17 @@ int script_arg_init ( script_arg_t *Arg, int argc, char **argv )
 {
     cli_option_t CliOpt[] =
     {
-        { "port_file", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port.File), NULL },
-        { "port_dbits", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port.DBits), NULL },
-        { "port_sbits", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port.SBits), NULL },
-        { "port_parity", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port.Parity), NULL },
-        { "port_speed", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port.Speed), NULL },
-        { "device", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Device.Name), NULL },
-        { "timeout", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Device.Timeout), NULL },
-        { "parametr", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Device.Parametr), NULL },
-        { "log_file", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Log.File), NULL },
-        { "journal_file", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Journal.File), NULL },
-        { "journal_flashback", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Journal.Flashback), NULL },
+        { "port_file", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port->File), NULL },
+        { "port_dbits", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port->DBits), NULL },
+        { "port_sbits", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port->SBits), NULL },
+        { "port_parity", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port->Parity), NULL },
+        { "port_speed", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Port->Speed), NULL },
+        { "device", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Device->Name), NULL },
+        { "timeout", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Device->Timeout), NULL },
+        { "parametr", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Device->Parametr), NULL },
+        { "log_file", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Log->File), NULL },
+        { "journal_file", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Journal->File), NULL },
+        { "journal_flashback", 0, CLI_REQUIRED_ARG, __hndl_1, &(Arg->Journal->Flashback), NULL },
         { "protocol", 0, CLI_REQUIRED_ARG, __hndl_protocol, &(Arg->Flag), NULL },
         { "verbose", 0, CLI_REQUIRED_ARG, __hndl_verbose, &(Arg->Flag), NULL },
         CLI_LAST_OPTION
