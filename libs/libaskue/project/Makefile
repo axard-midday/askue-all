@@ -16,7 +16,7 @@ object_files := $(object_files:.c=.o)
 
 link_flags := -lsqlite3 -shared 
 compile_flags := -std=c99 -fPIC
-soname_flag := -Wl,-soname,$@.so.$(majorVersion)
+soname_flag := -Wl,-soname,$(project_name).so.$(majorVersion)
 
 CC := gcc-3.4
 

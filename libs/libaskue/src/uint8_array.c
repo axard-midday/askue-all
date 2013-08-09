@@ -22,6 +22,8 @@ void uint8_array_init ( uint8_array_t *u8a, size_t size )
 void uint8_array_destroy ( uint8_array_t* ptr )
 {
 	myfree ( ptr->Item );
+    ptr->Size = 0;
+    ptr->Item = NULL;
 }
 
 void uint8_array_resize ( uint8_array_t* ptr, size_t size )
