@@ -14,6 +14,9 @@
 #include <sys/select.h>
 #include <ctype.h>
 
+#include <readline/readline.h>
+#include <readline/history.h>
+
 #include <libaskue.h>
 
 
@@ -27,7 +30,7 @@
 #define apOperationReceive 0
 #define apOperationSet 1
 #define apOperationUnset 2
-#define apOperationEdit 3
+#define apOperationVerify 3
 #define apOperationApply 4
 #define apOperationTransmit 5
 #define apOperationPrint 6
@@ -218,10 +221,10 @@ int remove_ap_label_list ( ap_label_list_t **Head, const char *Name )
 /*  обработчики состояний машины  */
 typedef struct _ap_config_t
 {
+    askue_port_t Port;
     char *Str;
     int Flag;
     int Operation;
-    askue_port_t Port;
     uint8_array_t Content;
     int Type;
     long int Timeout;
@@ -302,7 +305,6 @@ void quit ( int s )
     
     exit ( EXIT_SUCCESS );
 }
-
 
 int is_stdin_ready ( void )
 {
@@ -413,6 +415,26 @@ int read_string ( ap_config_t *apCfg )
     UNSETBIT ( apCfg->Flag, apFlagEof );
     UNSETBIT ( apCfg->Flag, apFlagError );
     
+    //myfree ( apCfg->Str );
+    if ( apCfg->Str != NULL )
+    {
+        free ( apCfg->Str );
+        apCfg->Str = NULL;
+    }
+    apCfg->Str = readline ( "<<<:" );
+    add_history ( apCfg->Str );
+    stifle_history ( 5 );
+    
+    if ( apCfg->Str == NULL )
+        SETBIT( apCfg->Flag, apFlagEof );
+    
+    return ( TESTBIT (  apCfg->Flag, apFlagEof ) ) ? apWarning : apSuccess;
+    
+    /*
+    UNSETBIT ( apCfg->Flag, apFlagEnter );
+    UNSETBIT ( apCfg->Flag, apFlagEof );
+    UNSETBIT ( apCfg->Flag, apFlagError );
+    
     apCfg->Str = NULL;
     
     while ( !TESTBIT( apCfg->Flag, apFlagEnter ) &&
@@ -445,6 +467,7 @@ int read_string ( ap_config_t *apCfg )
     
     return ( TESTBIT ( apCfg->Flag, apFlagError ) ) ? apError :
             ( TESTBIT (  apCfg->Flag, apFlagEof ) ) ? apWarning : apSuccess;
+    */
 }
 
 void stdin_invitation ( void )
@@ -470,7 +493,6 @@ void stdout_invitation ( void )
  */
 int __func_OperationReceive ( ap_config_t *apCfg )
 {
-    stdin_invitation ();
     return read_string ( apCfg );
 }
 
@@ -555,17 +577,25 @@ int __func_OperationPrint ( ap_config_t *apCfg )
  */
 int __func_OperationTransmit ( ap_config_t *apCfg )
 {
-    /*
+    puts ( "Старт передачи..." );
+    view_content ( &( apCfg->Content ), apTypeHex );
     // передача фрейма
-    if ( port_write ( &( apCfg->Port ), &( apCfg->Content ) ) )
+    if ( port_write ( &( apCfg->Port ), &( apCfg->Content ) ) == -1 )
+    {
+        perror ( "Ошибка передачи данных." );
         return apError;
+    }
+    puts ( "Конец передачи." );
     // очистка буфера
-    uint8_array_destroy ( &( apCfg->Content ) );
+    puts ( "Старт приёма..." );
     // приём фрейма
-    if ( port_read ( &( apCfg->Port ), &( apCfg->Content ), apCfg->Timeout ) )
+    if ( port_read ( &( apCfg->Port ), &( apCfg->Content ), apCfg->Timeout ) == -1 )
+    {
+        perror ( "Ошибка приёма данных." );
         return apError;
-    */
-    puts ( "__func_OperationTransmit - done." );
+    }
+    puts ( "Конец приёма." );
+    //puts ( "__func_OperationTransmit - done." );
     
     return apSuccess;
 }
@@ -587,13 +617,14 @@ int __func_OperationSet ( ap_config_t *apCfg )
     }
     
     // копирование имени
-    char *Name = mymalloc ( sizeof ( char ) * ( ContentPtr - NamePtr ) );
-    strncpy ( Name, NamePtr, ContentPtr - NamePtr + 1 );
+    char *Name = mymalloc ( sizeof ( char ) * ( ContentPtr - NamePtr + 1 ) );
+    memset ( Name, '\0', ( size_t ) ( ContentPtr - NamePtr + 1 ) );
+    strncpy ( Name, NamePtr, ContentPtr - NamePtr );
     
     // поиск действительного начала фрейма
     ContentPtr++;
     while ( *ContentPtr == ' ' ) ContentPtr++;
-    
+
     // определение типа
     int Type = __check_type ( ContentPtr );
     if ( Type == apWarning ) 
@@ -602,18 +633,27 @@ int __func_OperationSet ( ap_config_t *apCfg )
         puts ( "Предупреждение. Неизвестный тип данных." );
         return apWarning;
     }
+
     // копирование содержимого
-    uint8_array_t *Content = malloc ( sizeof ( uint8_array_t* ) );
-    if ( Content == NULL )
-    {
-        perror ( "Ошибка malloc()." );
-        exit ( EXIT_FAILURE );
-    }
+    uint8_array_t *Content = mymalloc ( sizeof ( uint8_array_t* ) );
+    uint8_array_init ( Content, 0 );
     set_content ( Content, ContentPtr, Type );
-    // добавить метку в список
-    ap_label_t *L = new_ap_label ( Name, Content, Type );
-    ap_label_list_t *LL = new_ap_label_list ( L );
-    push_ap_label_list ( &(apCfg->List), LL );
+
+    // поиск метки
+    ap_label_list_t *Old = find_ap_label_list_by_name ( apCfg->List, Name );
+    if ( Old == NULL )
+    {
+        // добавить метку в список
+        ap_label_t *L = new_ap_label ( Name, Content, Type );
+        ap_label_list_t *LL = new_ap_label_list ( L );
+        push_ap_label_list ( &(apCfg->List), LL );
+    }
+    else
+    {
+        // изменить метку
+        delete_ap_label ( Old->Label );
+        Old->Label = new_ap_label ( Name, Content, Type );
+    }
     
     return apSuccess;
 }
@@ -670,14 +710,20 @@ int __func_OperationApply ( ap_config_t *apCfg )
     uint8_array_update ( &( apCfg->Content ), LL->Label->Content->Item, LL->Label->Content->Size );
     
     apCfg->Type = LL->Label->Type;
-    puts ( "Метка:" );
-    view_content ( &( apCfg->Content ), apCfg->Type );
-    view_name ( LL->Label->Name );
+    // view_content ( &( apCfg->Content ), apCfg->Type );
+    // view_name ( LL->Label->Name );
     
     return apSuccess;
 }
 
 /* ------------------------------ */
+
+/* вывод команды в hex-виде */
+int __func_OperationVerify ( ap_config_t *apCfg )
+{
+    stdout_invitation();
+    return __func_OperationPrint_Hex ( apCfg );
+}
 
 
 // распознавание операции
@@ -685,7 +731,7 @@ int __what_operation ( const char *str )
 {
     return ( str[ 0 ] == '+' ) ? apOperationSet :
             ( str[ 0 ] == '-' ) ? apOperationUnset :
-            ( str[ 0 ] == '?' ) ? apOperationEdit :
+            ( str[ 0 ] == '?' ) ? apOperationVerify :
             ( str[ 0 ] == '!' ) ? apOperationApply : apOperationDefault;
 }
 
@@ -749,9 +795,9 @@ void REPL ( ap_config_t *apCfg )
             apCfg->Operation = apOperationReceive;
             break;
         // '?'
-        case apOperationEdit:
-            puts ( "Редактирование пока недоступно." );
-            // __func_OperationEdit ( apCfg );
+        case apOperationVerify:
+            // puts ( "Редактирование пока недоступно." );
+            __func_OperationVerify ( apCfg );
             apCfg->Operation = apOperationReceive;
             break;
         // '!'
@@ -784,20 +830,70 @@ void REPL ( ap_config_t *apCfg )
 
 /* ------------------------------ */
 
+// открыть файл порта
+int __clih_set ( void *ptr, int *flag, const char *arg )
+{
+    *( const char** )ptr = arg;
+    return 0;
+}
+
+int __clih_set_timeout ( void *ptr, int *flag, const char *arg )
+{
+    *( long int* )ptr = strtol ( arg, NULL, 10 );
+    return 0;
+}
+
+/*    Инициализация конфига     */
+int init_ap_cfg ( int argc, char **argv )
+{
+    AP_Cfg.Str = NULL;
+    AP_Cfg.Flag = 0;
+    AP_Cfg.List = NULL;
+    uint8_array_init ( &(AP_Cfg.Content), 0 );
+    AP_Cfg.Operation = apOperationReceive;
+    
+    askue_port_cfg_t Cfg;
+    
+    cli_option_t CliOption[] =
+    {
+        { "port-file", 'f', CLI_REQUIRED_ARG, __clih_set, &( Cfg.File ), NULL },
+        { "port-speed", 's', CLI_REQUIRED_ARG, __clih_set, &( Cfg.Speed ), NULL },
+        { "port-dbits", 'd', CLI_REQUIRED_ARG, __clih_set, &( Cfg.DBits ), NULL },
+        { "port-sbits", 'b', CLI_REQUIRED_ARG, __clih_set, &( Cfg.SBits ), NULL },
+        { "port-parity", 'p', CLI_REQUIRED_ARG, __clih_set, &( Cfg.Parity ), NULL },
+        { "timeout", 't', CLI_REQUIRED_ARG, __clih_set_timeout, &( AP_Cfg.Timeout ), NULL },
+        CLI_LAST_OPTION
+    };
+    
+    cli_result_t CliResult = cli_parse ( CliOption, argc, argv );
+    if ( CliResult != CLI_SUCCESS )
+    {
+        puts ( "Ошибка разбора аргументов." );
+        return -1;
+    }
+    else
+    {
+        port_init ( &(AP_Cfg.Port), &Cfg );
+        return 0;
+    }
+    
+}
+/*  --------------------------  */
+
 /*    Точка входа в программу     */
 
 int main(int argc, char **argv)
 {
-	AP_Cfg.Str = NULL;
-    AP_Cfg.Flag = 0;
-    AP_Cfg.List = NULL;
+    
+    if ( init_ap_cfg ( argc, argv ) )
+        return -1;
+    
+	
     
     signal ( SIGINT, quit );
     signal ( SIGQUIT, quit ); 
     
-    uint8_array_init ( &(AP_Cfg.Content), 0 );
     
-    AP_Cfg.Operation = apOperationReceive;
     
     while ( !TESTBIT ( AP_Cfg.Flag, apFlagError ) &&
              !TESTBIT ( AP_Cfg.Flag, apFlagEof ) )
@@ -817,6 +913,8 @@ int main(int argc, char **argv)
         Now = Next;
         if ( Now != NULL ) Next = Now->Next;
     }
+    
+    port_destroy ( &(AP_Cfg.Port ) );
     
 	return 0;
 }

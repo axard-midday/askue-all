@@ -62,19 +62,18 @@ int port_destroy ( askue_port_t *Port )
 int port_init ( askue_port_t *Port, const askue_port_cfg_t *Cfg )
 {
     int RS232 = rs232_open ( Cfg->File );
-    struct termios termRS232;
-    if ( rs232_init ( RS232, &termRS232 ) )
+    if ( rs232_init ( RS232, &( Port->Termios ) ) )
     {
         rs232_close ( RS232 );
         return -1;
     }
     
-    rs232_set_databits ( &termRS232, Cfg->DBits );
-    rs232_set_stopbits ( &termRS232, Cfg->SBits );
-    rs232_set_parity ( &termRS232, Cfg->Parity );
-    rs232_set_speed ( &termRS232, Cfg->Speed );
+    rs232_set_databits ( &( Port->Termios ), Cfg->DBits );
+    rs232_set_stopbits ( &( Port->Termios ), Cfg->SBits );
+    rs232_set_parity ( &( Port->Termios ), Cfg->Parity );
+    rs232_set_speed ( &( Port->Termios ), Cfg->Speed );
     
-    if ( rs232_apply ( RS232, &termRS232 ) )
+    if ( rs232_apply ( RS232, &( Port->Termios ) ) )
     {
         rs232_close ( RS232 );
         return -1;

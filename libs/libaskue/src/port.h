@@ -2,6 +2,7 @@
 #define ASKUE_PORT_H_
 
 #include <stdio.h>
+#include <termios.h>
 
 #include "uint8_array.h"
 
@@ -10,6 +11,7 @@ typedef struct _askue_port_t
     int RS232;
     FILE *In;
     FILE *Out;
+    struct termios Termios;
 } askue_port_t;
 
 typedef struct _askue_port_cfg_t
