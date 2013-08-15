@@ -577,25 +577,28 @@ int __func_OperationPrint ( ap_config_t *apCfg )
  */
 int __func_OperationTransmit ( ap_config_t *apCfg )
 {
-    puts ( "Старт передачи..." );
-    view_content ( &( apCfg->Content ), apTypeHex );
     // передача фрейма
     if ( port_write ( &( apCfg->Port ), &( apCfg->Content ) ) == -1 )
     {
         perror ( "Ошибка передачи данных." );
         return apError;
     }
-    puts ( "Конец передачи." );
     // очистка буфера
-    puts ( "Старт приёма..." );
     // приём фрейма
-    if ( port_read ( &( apCfg->Port ), &( apCfg->Content ), apCfg->Timeout ) == -1 )
+    if ( port_read ( &( apCfg->Port ), &( apCfg->Content ), apCfg->Timeout / 2 ) == -1 )
     {
         perror ( "Ошибка приёма данных." );
         return apError;
     }
-    puts ( "Конец приёма." );
-    //puts ( "__func_OperationTransmit - done." );
+    uint8_array_t u8a;
+    uint8_array_init ( &u8a, 0 );
+    if ( port_read ( &( apCfg->Port ), &u8a, apCfg->Timeout / 2 ) == -1 )
+    {
+        perror ( "Ошибка приёма данных." );
+        return apError;
+    }
+    uint8_array_append ( &( apCfg->Content ), u8a.Item, u8a.Size );
+    uint8_array_destroy ( &u8a );
     
     return apSuccess;
 }
