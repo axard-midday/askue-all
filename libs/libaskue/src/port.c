@@ -59,19 +59,19 @@ int port_destroy ( askue_port_t *Port )
 }
 
 // настроить порт
-int port_init ( askue_port_t *Port, const askue_port_cfg_t *Cfg )
+int port_init ( askue_port_t *Port, const char *file, const char *speed, const char *dbits, const char *sbits, const char *parity )
 {
-    int RS232 = rs232_open ( Cfg->File );
+    int RS232 = rs232_open ( file );
     if ( rs232_init ( RS232, &( Port->Termios ) ) )
     {
         rs232_close ( RS232 );
         return -1;
     }
     
-    rs232_set_databits ( &( Port->Termios ), Cfg->DBits );
-    rs232_set_stopbits ( &( Port->Termios ), Cfg->SBits );
-    rs232_set_parity ( &( Port->Termios ), Cfg->Parity );
-    rs232_set_speed ( &( Port->Termios ), Cfg->Speed );
+    rs232_set_databits ( &( Port->Termios ), dbits );
+    rs232_set_stopbits ( &( Port->Termios ), sbits );
+    rs232_set_parity ( &( Port->Termios ), parity );
+    rs232_set_speed ( &( Port->Termios ), speed );
     
     if ( rs232_apply ( RS232, &( Port->Termios ) ) )
     {

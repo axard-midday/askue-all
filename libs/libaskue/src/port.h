@@ -14,19 +14,10 @@ typedef struct _askue_port_t
     struct termios Termios;
 } askue_port_t;
 
-typedef struct _askue_port_cfg_t
-{
-    const char *File;
-    const char *DBits;
-    const char *SBits;
-    const char *Parity;
-    const char *Speed;
-} askue_port_cfg_t;
-
 // закрыть порт
 int port_destroy ( askue_port_t *Port );
 // настроить порт
-int port_init ( askue_port_t *Port, const askue_port_cfg_t *Cfg );
+int port_init ( askue_port_t *Port, const char *file, const char *speed, const char *dbits, const char *sbits, const char *parity );
 // читать из порта
 int port_read ( const askue_port_t *Port, uint8_array_t *u8a, long int timeout );
 // писать в порт

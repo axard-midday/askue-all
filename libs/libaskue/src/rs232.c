@@ -22,31 +22,9 @@
 #include <errno.h>
 #include <string.h>
 
-static
-const char* speed_str_array[] =
-{
-	"0",
-	"50",
-	"75",
-	"110",
-	"134",
-	"150",
-	"200",
-	"300",
-	"600",
-	"1200",
-	"1800",
-	"2400",
-	"4800",
-	"9600",
-	"19200",
-	"38400",
-	"57600",
-	"115200",
-	"230400",
-	NULL
-};
+#include "rs232.h"
 
+#define speed_str_array rs232_speed
 static
 speed_t speed_array[] =
 {
@@ -199,5 +177,5 @@ int rs232_apply( int rs232_fd, struct termios *T )
 	return tcsetattr ( rs232_fd, TCSAFLUSH, T );
 }
 
-
+#undef speed_str_array
 
