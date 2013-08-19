@@ -39,12 +39,12 @@ cli_arg_type_t get_argtype ( const char *arg )
         }
         else
         {
-            return CLI_NO_ARG;
+            return CLI_UNKNOW_ARG;
         }
     }
     else
     {
-        return CLI_NO_ARG;
+        return CLI_UNKNOW_ARG;
     }
 }
 
@@ -54,10 +54,9 @@ const char* get_short_opt_arg ( int *index, int argc, char **argv )
 {
     int _i = *index;
     if ( ( _i + 1 ) < argc &&
-         get_optype ( argv[ _i + 1 ] ) == CLI_NO_OPT )
+         get_argtype ( argv[ _i + 1 ] ) == CLI_UNKNOW_ARG )
     {
         *index += 2;
-        
         return argv[ _i + 1 ];
     }
     else
@@ -85,14 +84,14 @@ const char* get_long_opt_arg ( const char *argv )
 
 // проверка что опция последняя
 static
-int is_last_option ( cli_option_t *Option )
+int is_last_arg ( cli_arg_t *Option )
 {
-    return Option->longname == NULL &&
-            Option->shortname == 0 &&
-            Option->has_arg == 0 &&
-            Option->handler == NULL &&
-            Option->outvar == NULL &&
-            Option->flag == NULL;
+    return Option->LongName == NULL &&
+            Option->ShortName == 0 &&
+            Option->ArgNeed == CLI_NO_ARG &&
+            Option->ValNeed == CLI_NO_VAL &&
+            Option->Handler == NULL &&
+            Option->Var == NULL;
 }
 
 // проверка опции
@@ -156,7 +155,7 @@ cli_arg_t* find_arg ( cli_arg_t *Args, const char *ArgName )
 {
     cli_arg_t *Arg;
     // определение длинны аргумента
-    switch ( get_argtype ( argv [ i ] )
+    switch ( get_argtype ( ArgName ) )
     {
         case CLI_LONG_ARG:
             Arg = find_arg_by_longname ( Args, ArgName + 2 );
@@ -172,96 +171,15 @@ cli_arg_t* find_arg ( cli_arg_t *Args, const char *ArgName )
     return Arg;
 }
 
-static 
-cli_result_t eval_option ( cli_option_t *Opt, cli_option_type_t OType, const char *option, const char *argument )
-{ 
-    if ( Opt == NULL )
-    {
-        return CLI_ERROR_NF_OPT;
-    }
-    
-    return ( !Opt->handler ( Opt->outvar, Opt->flag, argument ) ) ? CLI_SUCCESS 
-                                                                   : CLI_ERROR_HANDLER;
-}
-
-// обработка аргумента CLI с обязательным значением
 static
-cli_result_t parse_req_val ( cli_arg_t *Arg, cli_arg_type_t ArgType, int *i, int argc, char **argv )
+const char* find_val ( const char *argv )
 {
-    int _i = *i;
-    
-    const char *StrArgVal = NULL;
-    const char *StrArgName = argv[ _i ];
-    
-    if ( ArgType == CLI_SHORT_ARG )
-    {
-        // разбор короткой опции
-        StrArgVal = get_short_opt_arg ( i, argc, argv );
-    }
-    else
-    {
-        // разбор длинной опции
-        StrArgVal = get_long_arg_val ( StrArgName );
-        ( *i )++;
-    }  
-     
-    return ( StrArgVal != NULL ) ? eval_arg_handler ( Arg, ArgType, StrArgVal ) 
-                                  : CLI_ERROR_NOVAL;
+    register const char *_r = argv;
+    while ( *_r != '=' ) _r++;
+    return _r;
 }
 
-// обработка опции CLI с опциональным аргументом
-static
-cli_result_t eval_option_oarg ( cli_option_t *Option, cli_option_type_t OpType, int *i, int argc, char **argv )
-{
-    int _i = *i;
-    
-    const char *argument = NULL;
-    char *option = argv[ _i ];
-    
-    cli_result_t Result;
-    if ( OpType == CLI_SHORT_OPT )
-    {
-        // разбор короткой опции
-        argument = get_short_opt_arg ( i, argc, argv ); 
-    }
-    else
-    {
-        // разбор длинной опции
-        argument = get_long_opt_arg ( argv[ _i ] );
-        ( *i )++;
-    }
-    
-    Result = eval_option ( Option, OpType, option, argument );
-    
-    return Result;
-}
-
-// обработка опции CLI с отсутствующим аргументом
-static
-cli_result_t eval_option_noarg ( cli_option_t *Opt, cli_option_type_t OpType, const char *option )
-{
-    return eval_option ( Opt, OpType, option, NULL );
-}
-
-// кол-во необходимых для ввода аргументов
-static
-size_t get_need_arg_amount ( cli_arg_t *Args )
-{
-    size_t Amount = 0;
-    
-    while ( *Args != CLI_LAST_ARG )
-    {
-        if ( (*Args).ArgNeed == CLI_REQUIRED_ARG )
-            Amount ++;
-            
-        Args ++;
-    }
-    
-    return Amount;
-}
-
-// найти
-
+// найти аргумент
 cli_result_t cli_parse ( cli_arg_t *Args, int argc, char** argv )
 {
     cli_result_t Result = CLI_SUCCESS;
@@ -272,20 +190,28 @@ cli_result_t cli_parse ( cli_arg_t *Args, int argc, char** argv )
 
     while ( ( i < argc ) && ( Result == CLI_SUCCESS ) )
     {
+        // найти аргумент
         cli_arg_t *Arg = find_arg ( Args, argv[ i ] );
-        if ( Arg == NULL )
+        if ( Arg == NULL ) // ошибка поиска аргумента
         {
-            Result = CLI_ERROR_ARGTYPE
+            Result = CLI_ERROR_ARGTYPE;
         }
         else
         {
+            // аргумент обязателен
             if ( Arg->ArgNeed == CLI_REQUIRED_ARG )
                 NeedArgAmount--;
             
+            // поиск значения аргумента
             const char *Val;
-            if ( Arg->ValNeed != CLI_NO_VAL )
+            if ( Arg->ValNeed != CLI_NO_VAL ) // обязателен или опционален
             {
                 Val = find_val ( argv[ i ] );
+                if ( Arg->ValNeed == CLI_REQUIRED_VAL && Val == NULL )
+                {
+                    Result = CLI_ERROR_NOVAL;
+                }
+                
                 Result = ( Arg->Handler ( Arg->Var, Val ) == 0 ) ? CLI_SUCCESS : CLI_ERROR_HANDLER;
             }
             else
@@ -298,30 +224,5 @@ cli_result_t cli_parse ( cli_arg_t *Args, int argc, char** argv )
         i++;
     }
     
-    return ( !NeedArgAmount ) ? Result : CLI_ERROR_NOARG;
+    return ( !NeedArgAmount ) ? Result : CLI_ERROR_NEEDARG;
 }
-
-
-cli_arg_t *Arg;
-            if ( is_long_arg ( 
-            find_arg_by_longname ( Args, ArgType, argv[ i ] );
-            // если найден необходимый аргумент, то уменьшить их кол-во
-            if ( Arg->ArgNeed == CLI_REQUIRED_ARG )
-                NeedArgAmount--;
-            // обработка аргумента
-            switch ( Arg->ValNeed )
-            {
-                case CLI_REQUIRED_VAL: 
-                    Result = get_req_val ( Arg, OpType, &i, argc, argv ); 
-                    break;
-                case CLI_OPTIONAL_VAL: 
-                    Result = eval_option_oarg ( Opt, OpType, &i, argc, argv ); 
-                    break;
-                case CLI_NO_VAL: 
-                    Result = eval_option_noarg ( Opt, OpType, argv[ i ] );
-                    i++;
-                    break;
-                default: 
-                    Result = CLI_ERROR_ARG;
-                    break;
-            }

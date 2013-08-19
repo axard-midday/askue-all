@@ -27,30 +27,26 @@
 /*
  * ФЛАГИ
  */
-#define ASKUE_FLAG_VERBOSE 0
-#define ASKUE_FLAG_CYCLE 1
-#define ASKUE_FLAG_PROTOCOL 2
-
+#define ASKUE_FLAG_VERBOSE              0
+#define ASKUE_FLAG_CYCLE                1
+#define ASKUE_FLAG_PROTOCOL             2
+#define ASKUE_FLAG_DEBUG                3
 /*
  * Сигналы
  */
-#define EXIT_BYSIGNAL 2
-#define EXIT_FAILURE_SENV_INIT 3
-#define EXIT_FAILURE_SENV_DESTROY 4
+#define EXIT_BYSIGNAL                   2
+#define EXIT_FAILURE_SENV_INIT          3
+#define EXIT_FAILURE_SENV_DESTROY       4
 
 /*
  * СТРОКОВЫЕ БУФЕРЫ
  */
-
-// общецелевой буфер
-#define STRING_BUF 256
-
 // специальные буферы (без учёта конечного символа)
-#define TIME_STRING_BUF 8
-#define DATE_STRING_BUF 10
+#define TIME_STRING_BUF                 8
+#define DATE_STRING_BUF                 10
 
 // с учётом разделительного символа (без учёта конечного символа)
-#define DATE_TIME_STRING_BUF ( TIME_STRING_BUF + DATE_STRING_BUF + 1 )
+#define DATE_TIME_STRING_BUF            ( TIME_STRING_BUF + DATE_STRING_BUF + 1 )
 
 /*
  * ПРОВЕРКА БИТОВ
