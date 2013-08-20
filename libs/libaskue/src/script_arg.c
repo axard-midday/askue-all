@@ -118,14 +118,14 @@ int __parse4journal_file ( void *Journal, const char *value )
         return -1;
     }
     
-    ( *( askue_journal_t** ) Journal )->File = db;
+    ( *( askue_jnl_t** ) Journal )->File = db;
     
     return 0;
 }
 
 int __parse4journal_flashback ( void *Journal, const char *value )
 {
-    return ( ( *( askue_journal_t** ) Journal )->Flashback = ( size_t ) strtol ( value, NULL, 10 ) ) == 0;
+    return ( ( *( askue_jnl_t** ) Journal )->Flashback = ( size_t ) strtol ( value, NULL, 10 ) ) == 0;
 }
 
 

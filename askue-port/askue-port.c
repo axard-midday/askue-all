@@ -218,21 +218,18 @@ int remove_ap_label_list ( ap_label_list_t **Head, const char *Name )
  
 /* ------------------------------ */
 
-typedef struct _ap_buffer_t
-{
-    uint8_array_t *Content;
-    int Type;
-} ap_buffer_t;
-
 /*  обработчики состояний машины  */
 typedef struct _ap_config_t
 {
-    askue_port_t *Port;
+    askue_port_t Port;
     char *Str;
     int Operation;
-    ap_buffer_t *Buffer;
+    uint8_array_t Content;
+    int Type;
     long int Timeout;
+    char Output[ 1024 ];
     ap_label_list_t *List;
+    uint32_t Flag;
 } ap_config_t;
 
 uint32_t gFlags;
@@ -861,28 +858,27 @@ int ap_init ( ap_config_t *ap_cfg, int argc, char **argv )
     ap_cfg->Str = NULL;
     ap_cfg->Flag = 0;
     ap_cfg->List = NULL;
-    ap_cfg->Buffer = mymalloc ( sizeof ( ap_buffer_t ) );
-    ap_cfg->Buffer->Content = mymalloc ( sizeof ( uint8_array_t ) );
+    ap_cfg->Content = mymalloc ( sizeof ( uint8_array_t ) );
     uint8_array_init ( AP_Cfg->Content, 0 );
-    ap_cfg->Buffer->Type = apTypeNo;
+    ap_cfg->Type = apTypeNo;
     ap_cfg->Operation = apOperationReceive;
     
     //askue_port_cfg_t Cfg;
     const char *port_args[];
-    #define PORT_FILE 0
-    #define PORT_SPEED 1
-    #define PORT_DBITS 2
-    #define PORT_SBITS 3
-    #define PORT_PARITY 4
+    #define PORT_FILE port_args[ 0 ]
+    #define PORT_SPEED port_args[ 1 ]
+    #define PORT_DBITS port_args[ 2 ]
+    #define PORT_SBITS port_args[ 3 ]
+    #define PORT_PARITY port_args[ 4 ]
     
-    cli_option_t CliOption[] =
+    cli_arg_t CliOption[] =
     {
-        { "port-file", 'f', CLI_REQUIRED_ARG, __cli_handler_port_file, &( port_args[ PORT_FILE ] ), NULL },
-        { "port-speed", 's', CLI_REQUIRED_ARG, __cli_handler_port, &( port_args[ PORT_SPEED ] ), NULL },
-        { "port-dbits", 'd', CLI_REQUIRED_ARG, __cli_handler_port, &( port_args[ PORT_DBITS ] ), NULL },
-        { "port-sbits", 'b', CLI_REQUIRED_ARG, __cli_handler_port, &( port_args[ PORT_SBITS ] ), NULL },
-        { "port-parity", 'p', CLI_REQUIRED_ARG, __cli_handler_port, &( port_args[ PORT_PARITY ] ), NULL },
-        { "timeout", 't', CLI_REQUIRED_ARG, __cli_handler_timeout, &( AP_Cfg.Timeout ), NULL },
+        { "port-file", 'f', CLI_REQUIRED_ARG, CLI_REQUIRED_VAL, __cli_handler_port_file, &PORT_FILE },
+        { "port-speed", 's', CLI_REQUIRED_ARG, CLI_REQUIRED_VAL, __cli_handler_port_speed, &PORT_SPEED },
+        { "port-dbits", 'd', CLI_REQUIRED_ARG, CLI_REQUIRED_VAL, __cli_handler_port_dbits, &PORT_DBITS },
+        { "port-sbits", 'b', CLI_REQUIRED_ARG, CLI_REQUIRED_VAL, __cli_handler_port_sbits, &PORT_SBITS },
+        { "port-parity", 'p', CLI_REQUIRED_ARG, CLI_REQUIRED_VAL, __cli_handler_port_parity, &PORT_PARITY },
+        { "timeout", 't', CLI_REQUIRED_ARG, CLI_REQUIRED_VAL, __cli_handler_timeout, &( AP_Cfg.Timeout ) },
         CLI_LAST_OPTION
     };
     
@@ -911,9 +907,21 @@ int ap_init ( ap_config_t *ap_cfg, int argc, char **argv )
 
 /*    Интерфейс взаимодействия с пользователем      */
 static
-int ap_interface ( ap_config_t ap_cfg; )
+int ap_interface ( ap_config_t ap_cfg )
 {
+    if ( apCfg->Str != NULL )
+    {
+        free ( apCfg->Str );
+        apCfg->Str = NULL;
+    }
+    apCfg->Str = readline ( "<<<:" );
+    add_history ( apCfg->Str );
+    stifle_history ( 5 );
     
+    if ( apCfg->Str == NULL )
+        SETBIT( apCfg->Flag, apFlagEof );
+    
+    return ( TESTBIT (  apCfg->Flag, apFlagEof ) ) ? apWarning : apSuccess;
 }
 
 
