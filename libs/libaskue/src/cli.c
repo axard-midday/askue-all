@@ -176,7 +176,26 @@ const char* find_val ( const char *argv )
 {
     register const char *_r = argv;
     while ( *_r != '=' ) _r++;
+    _r++;
     return _r;
+}
+
+static
+size_t get_need_arg_amount ( const cli_arg_t *Args )
+{
+    size_t Result = 0;
+    
+    while ( !is_last_arg ( Args ) )
+    {
+        if ( Args->ValNeed == CLI_REQUIRED_VAL )
+        {
+            Result++;
+        }
+        
+        Args++;
+    }
+    
+    return Result;
 }
 
 // найти аргумент
@@ -187,7 +206,6 @@ cli_result_t cli_parse ( cli_arg_t *Args, int argc, char** argv )
     int i = 1;
     // кол-во необходимых аргументов
     size_t NeedArgAmount = get_need_arg_amount ( Args );
-
     while ( ( i < argc ) && ( Result == CLI_SUCCESS ) )
     {
         // найти аргумент

@@ -65,7 +65,7 @@ struct tm add_day ( const struct tm *Time, int N );
  *    1 - Пн
  *    7 - Вс 
  */
-int add_wday ( int wday, int N )
+int add_wday ( int wday, int N );
 
 /*
  * 
