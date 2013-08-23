@@ -925,7 +925,53 @@ void signal_handler ( int s )
     exit ( EXIT_SUCCESS );
 }
 
+// установка сигнала
+static
+void ap_setsignal ( ap_config_t *ap_cfg )
+{
+    if ( ( signal ( SIGINT, signal_handler ) != SIG_ERR ) &&
+         ( signal ( SIGQUIT, signal_handler ) != SIG_ERR ) &&
+         ( signal ( SIGTERM, signal_handler ) != SIG_ERR ) ) 
+    {
+        ap_cfg->Error = ap_Success;
+    }
+    else
+    {
+        ap_cfg->Error = ap_Error;
+    }
+}
+
+// печать помощи
+static
+void ap_print_help ( void )
+{
+    puts ( "/******************************************************/" );
+    puts ( "                        Справка.                        " );
+    puts ( "Ввод данных в hex-формате осуществляется записью, через " );
+    puts ( "пробел hex-кодов байт в виду двух шестнадцатиричных цифр" );
+    puts ( "Например: a3 b2 12 34 88 00 0d ff 0d");
+    puts ( "Ввод данных в char-формате ( строка символов ) " );
+    puts ( "осуществляется записью непрерыной строки символов." );
+    puts ( "Символ возврата каретки и новой строки обозначаются как" );
+    puts ( "\r и \n соответственно.");
+    puts ( "Например: #USP1280F[B1274AF\r" );
+    puts ( "Добавление метки:" );
+    puts ( "+ <имя_метки>: <данные>" );
+    puts ( "Удаление метки:" );
+    puts ( "- <имя_метки>" );
+    puts ( "Передача данных метки в порт:" );
+    puts ( "! <имя_метки>" );
+    puts ( "Просмотр содержимого метки" );
+    puts ( "? <имя_метки>" );
+    puts ( "Программа ведёт историю введённых команд. Навигация по" );
+    puts ( "истории осуществляется с помощью кнопок <Стрелка Вверх>" );
+    puts ( "и <Стрелка Вниз>." );
+    puts ( "Приятной работы. Да пребудет с вами Сила..." );
+    puts ( "/******************************************************/" );
+}
+
 /*    Точка входа в программу     */
+
 int main(int argc, char **argv)
 {
     // конфигурация проги
@@ -935,9 +981,13 @@ int main(int argc, char **argv)
     if ( ap_cfg->Error == ap_Error )
         return -1;
     // настройка сигналов на завершение
-    signal ( SIGINT, signal_handler );
-    signal ( SIGQUIT, signal_handler ); 
-    signal ( SIGTERM, signal_handler ); 
+    ap_setsignal ( ap_cfg );
+    if ( ap_cfg->Error == ap_Error )
+    {
+        perror ( "Ошибка установки сигналов." );
+        return -1;
+    }
+    ap_print_help ();
     
     ap_logic ( ap_cfg );
     
