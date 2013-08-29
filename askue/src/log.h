@@ -2,9 +2,10 @@
 #define ASKUE_LOG_H_
 
 #include <stdio.h>
+#include <libaskue/write_msg.h>
 
 #include "config.h"
-#include "write_msg.h"
+
 // открыть лог
 int askue_log_open ( FILE **Ptr, const askue_cfg_t *Cfg );
 // закрыть лог

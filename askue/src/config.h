@@ -4,98 +4,77 @@
 #include <libconfig.h>
 #include <stdint.h>
 
-//#define ASKUE_CONFIG_FILE "askue.cfg"
-
-/*
- * Типы можно было бы сделать и более сжато,
- * но при таком построении будет легче
- * осуществлять нововведения
- */
-
-
-typedef enum
+typedef struct _device_cfg_t
 {
-    Askue_NoClass,
-    Askue_Counter,
-    Askue_Modem
-} device_class_t;
-
-typedef enum
-{
-    Askue_NoSegment,
-    Askue_Remote,
-    Askue_Local
-} device_segment_t;
-
-typedef struct
-{
-    char *File;
-    char *Speed;
-    char *DBits;
-    char *SBits;
-    char *Parity;
-} port_cfg_t;
-
-typedef struct
-{
-    char *File;
-    char *Mode;
-    size_t Lines;
-} log_cfg_t;
-
-typedef struct 
-{
-    char *File;
-    size_t Size;
-    size_t Flashback;
-} journal_cfg_t;
-
-typedef struct
-{
-    char *Name;
-    char *Parametr;
-} script_cfg_t;
-
-typedef struct
-{
-    char *Name;
-    script_cfg_t **Script;
-} type_cfg_t;
-
-typedef struct
-{
-    char *Name;
-    long int Id;
-    long int Timeout;
-    device_class_t Class;
-    device_segment_t Segment;
-    type_cfg_t *Type;
+    char                        *Name;
+    char                        *Type;
+    uint32_t                    Timeout;
 } device_cfg_t;
 
-typedef struct
+typedef struct _script_cfg_t
 {
-    char *Name;
-    char *Parametr;
-} report_cfg_t;
+    char                        *Name;
+    char                        *Parametr;
+} script_cfg_t;
 
-typedef struct
+typedef struct _comm_cfg_t
 {
-    long int Id;
-    device_cfg_t *Device;
-} gate_cfg_t;
+    device_cfg_t                *Device;
+    script_cfg_t                *Script;
+} comm_cfg_t;
 
-typedef struct
+typedef struct _target_cfg_t
 {
-    port_cfg_t *Port;
-    log_cfg_t *Log;
-    journal_cfg_t *Journal;
-    gate_cfg_t *LocalGate;
-    gate_cfg_t **RemoteGateList;
-    device_cfg_t **DeviceList;
-    type_cfg_t **TypeList;
-    report_cfg_t **ReportList;
-    uint32_t Flag;
+    char                        *Type;
+    script_cfg_t               *Script;
+    size_t                       ScriptAmount;   
+} target_cfg_t;
+
+typedef struct _task_cfg_t
+{
+    target_cfg_t              *Target;
+    size_t                      TargetAmount;
+} task_cfg_t;
+
+typedef struct _port_cfg_t
+{
+    char                        *File;
+    char                        *Speed;
+    char                        *DBits;
+    char                        *SBits;
+    char                        *Parity;
+} port_cfg_t;
+
+typedef struct _log_cfg_t
+{
+    char                        *File;
+    char                        *Mode;
+    size_t                      Lines;
+} log_cfg_t;
+
+typedef struct _journal_cfg_t
+{
+    char                        *File;
+    size_t                      Size;
+    size_t                      Flashback;
+} journal_cfg_t;
+
+typedef struct _askue_cfg_t
+{
+    device_cfg_t              *Device;
+    size_t                      DeviceAmount;
+    comm_cfg_t                *Comm;
+    size_t                      CommAmount;
+    task_cfg_t                *Task;
+    size_t                      TaskAmount;
+    port_cfg_t                *Port;
+    log_cfg_t                 *Log;
+    journal_cfg_t             *Journal;
+    uint32_t                 *Network;
+    size_t                    NetworkSize;  
+    uint32_t                 Flag;  
 } askue_cfg_t;
+
 
 // инициализироать переменную конфигурации
 void askue_config_init ( askue_cfg_t *ACfg );
