@@ -1,358 +1,536 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <libconfig.h>
 #include <libaskue.h>
+#include <ctype.h>
 
 #include "config.h"
 
-/*                  Функции точки сбора конфигурации                  */
+// результат выполнения - ошибка
+#ifndef ASKUE_ERROR
+    #define ASKUE_ERROR -1
+#endif 
 
-// Инициализация порта
+// результат выполнения - успех
+#ifndef ASKUE_SUCCESS
+    #define ASKUE_SUCCESS 0
+#endif
+
+#ifndef _ASKUE_TBUFLEN
+    #define _ASKUE_TBUFLEN 512
+#endif
+
+#define askue_config_fail( msg ) write_msg ( stderr, "Конфигурация", "FAIL", msg );
+#define askue_config_error( msg ) write_msg ( stderr, "Конфигурация", "ERROR", msg );
+#define askue_config_ok( msg ) write_msg ( stdout, "Конфигурация", "OK", msg );
+
+/**********************************************************************/
+
+// получить описание журнала
 static
-void __init_port ( askue_cfg_t *ACfg )
+const config_setting_t* _get_journal ( const config_t *cfg )
 {
-    ACfg->Port = mymalloc ( sizeof ( port_cfg_t ) );
-    ACfg->Port->File = NULL;
-    ACfg->Port->DBits = NULL;
-    ACfg->Port->Parity = NULL;
-    ACfg->Port->SBits = NULL;
-    ACfg->Port->Speed = NULL;
-}
-
-// Инициализация лога
-static
-void __init_log ( askue_cfg_t *ACfg )
-{
-    ACfg->Log = mymalloc ( sizeof ( log_cfg_t ) );
-    ACfg->Log->File = NULL;
-    ACfg->Log->Mode = NULL;
-    ACfg->Log->Lines = 0;
-}
-
-// Инициализация базы данных
-static
-void __init_db ( askue_cfg_t *ACfg )
-{
-    ACfg->Journal = mymalloc ( sizeof ( journal_cfg_t ) );
-    ACfg->Journal->File = NULL;
-}
-
-// Инициализация списка устройств
-static
-void __init_device_list ( askue_cfg_t *ACfg )
-{
-    ACfg->DeviceList = NULL;
-}
-
-// Инициализация списка гейтов
-static
-void __init_gate_list ( askue_cfg_t *ACfg )
-{
-    ACfg->RemoteGateList = NULL;
-    ACfg->LocalGate = NULL;
-}
-
-
-// Инициализация списка сценариев
-static
-void __init_script_list ( askue_cfg_t *ACfg )
-{
-    ACfg->TypeList = NULL;
-}
-
-// Инициализация списка отчётов
-static
-void __init_report_list ( askue_cfg_t *ACfg )
-{
-    ACfg->ReportList = NULL;
-}
-
-/*                    Точка сбора конфигурации                        */
-void askue_config_init ( askue_cfg_t *ACfg )
-{
-    ACfg->Flag = 0;
-    __init_port ( ACfg );
-    __init_log ( ACfg );
-    __init_db ( ACfg );
-    __init_gate_list ( ACfg );
-    __init_device_list ( ACfg );
-    __init_script_list ( ACfg );
-    __init_report_list ( ACfg );
-}
-
-/*                Функции точки разбора конфигурации                  */
-
-// Удаление данных о порте
-static
-void __destroy_port ( askue_cfg_t *ACfg )
-{
-    myfree ( ACfg->Port->DBits );
-    myfree ( ACfg->Port->SBits );
-    myfree ( ACfg->Port->Speed );
-    myfree ( ACfg->Port->File );
-    myfree ( ACfg->Port->Parity );
-    myfree ( ACfg->Port );
-}
-
-// Удаление данных о логе
-static
-void __destroy_log ( askue_cfg_t *ACfg )
-{
-    myfree ( ACfg->Log->File );
-    myfree ( ACfg->Log->Mode );
-    myfree ( ACfg->Log );
-}
-
-// Удаление данных о базе
-static
-void __destroy_db ( askue_cfg_t *ACfg )
-{
-    myfree ( ACfg->Journal->File );
-    myfree ( ACfg->Journal );
-}
-
-// Удаление данных о списке устройств
-static
-void __destroy_device_list ( askue_cfg_t *ACfg )
-{
-    if ( ACfg->DeviceList != NULL )
+    // корневая метка конфигурации журнала
+    config_setting_t *setting = config_lookup ( cfg, "Journal" ); // поиск сети
+    if ( setting == NULL )
     {
-        for ( size_t i = 0; ACfg->DeviceList[ i ] != NULL; i++ )
-        {
-            myfree ( ACfg->DeviceList[ i ]->Name );
-            myfree ( ACfg->DeviceList[ i ] );
-        } 
-        
-        myfree ( ACfg->DeviceList );
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Journal'" );
+        return ( const config_setting_t* ) NULL;
     }
+    return ( const config_setting_t* ) setting;
 }
 
-// Удаление данных о списке гейтов
+// получить имя файла журнала ( базы данных )
 static
-void __destroy_gate_list ( askue_cfg_t *ACfg )
+const char* _get_journal_file ( const config_setting_t* setting )
 {
-    //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "Point 1" );
-    if ( ACfg->RemoteGateList != NULL )
+    const char *JnlFile;
+    if ( config_setting_lookup_string ( setting, "file", &(JnlFile) ) != CONFIG_TRUE )
     {
-        for ( size_t i = 0; ACfg->RemoteGateList[ i ] != NULL; i++ )
-        {
-            //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "ACfg->RemoteGateList[ i ]->Device->Name" );
-            myfree ( ACfg->RemoteGateList[ i ]->Device->Name );
-            //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "ACfg->RemoteGateList[ i ]->Device" );
-            myfree ( ACfg->RemoteGateList[ i ]->Device );
-            //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "ACfg->RemoteGateList[ i ]" );
-            myfree ( ACfg->RemoteGateList[ i ] );
-        } 
-        
-        myfree ( ACfg->RemoteGateList );
+        // сообщение об ошибке
+        askue_config_fail ( "Запись 'Journal' не полная" );
+        return ( const char* ) NULL;
     }
-    //write_msg ( stderr, "Деструктор: __destroy_gate_list", "OK", "Point 2" );
-    if ( ACfg->LocalGate != NULL )
-    {
-        myfree ( ACfg->LocalGate->Device->Name );
-        myfree ( ACfg->LocalGate->Device );
-        myfree ( ACfg->LocalGate );
-    } 
+    return JnlFile;
 }
 
-// Удаление данных о списке скриптов
+// получить размер журнала
 static
-void __destroy_type_list ( askue_cfg_t *ACfg )
+const char* _get_journal_size ( const config_setting_t* setting, int Verbose )
 {
-    if ( ACfg->TypeList != NULL )
+    const char *JnlSize;
+    if ( config_setting_lookup_string ( setting, "size", &(JnlSize) ) != CONFIG_TRUE )
     {
-        for ( size_t i = 0; ACfg->TypeList[ i ] != NULL; i++ )
+        // доп.сообщение
+        if ( Verbose )
         {
-            myfree ( ACfg->TypeList[ i ]->Name );
-            for ( size_t j = 0; ACfg->TypeList[ i ]->Script[ j ] != NULL; j++ )
-            {
-                myfree ( ACfg->TypeList[ i ]->Script[ j ] );
-            }
-            myfree ( ACfg->TypeList[ i ]->Script );
-            myfree ( ACfg->TypeList[ i ] );
-        } 
-        
-        myfree ( ACfg->TypeList );
-    }
-}
-
-// удалит память выделенную под отчёты
-static 
-void __destroy_report_list ( askue_cfg_t *ACfg )
-{
-    if ( ACfg->ReportList != NULL )
-    {
-        for ( size_t i = 0; ACfg->ReportList[ i ] != NULL; i++ )
-        {
-            myfree ( ACfg->ReportList[ i ]->Name );
-            myfree ( ACfg->ReportList[ i ] );
+            askue_config_error ( "Отсутствует запись 'Journal.size'" );
+            askue_config_ok ( "Установка значения по умолчанию 'Journal.size = 3'" );
         }
-        
-        myfree ( ACfg->ReportList );
+        return ( const char* ) NULL;
+    }
+    return JnlSize;
+}
+
+// установить значение размера журнала
+static
+size_t _set_journal_size ( const config_setting_t* setting, int Verbose )
+{
+    const char *JnlSize = _get_journal_size ( setting, Verbose );
+    if ( JnlSize == NULL)
+    {
+        // значение по умолчанию
+        return ( size_t ) 3;
+    }
+    else
+    {
+        // значение из конфига
+        return (size_t) strtoul ( JnlSize, NULL, 10 );
     }
 }
 
-/*                      Точка разбора конфигурации                    */
-void askue_config_destroy ( askue_cfg_t *ACfg )
+// прочитать кол-во флешбеков
+static
+const char* _get_journal_flashback ( const config_setting_t* setting, int Verbose )
 {
-    __destroy_port ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_port() - done" );
-    __destroy_log ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_log() - done" );
-    __destroy_db ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_db() - done" );
-    __destroy_device_list ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_device_list() - done" );
-    __destroy_gate_list ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_gate_list() - done" );
-    __destroy_type_list ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_type_list() - done" );
-    __destroy_report_list ( ACfg );
-    //write_msg ( stderr, "Деструктор конфигурации", "OK", "__destroy_report_list() - done" );
+    const char *JnlFlashback;
+    if ( config_setting_lookup_string ( setting, "flashback", &(JnlFlashback) ) != CONFIG_TRUE )
+    {
+        // доп.сообщение
+        if ( Verbose )
+        {
+            askue_config_error ( "Отсутствует запись 'Journal.flashback'" );
+            askue_config_ok ( "Установка значения по умолчанию 'Journal.flashback = 0'" );
+        }
+        return ( const char* ) NULL;
+    }
+    else
+    {
+        return JnlFlashback;
+    }
 }
 
-/*                Функции точки чтения конфигурации                   */
-
-// чтение конфигурации порта
+// установить кол-во флешбеков
 static
-int __config_read_port ( config_t *cfg, askue_cfg_t *ACfg )
+size_t _set_journal_flashback ( const config_setting_t* setting, int Verbose )
 {
-     config_setting_t *port_setting = config_lookup ( cfg, "Port" ); // поиск сети
-     if ( port_setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'Port'" );
-         return -1;
-     }
-     
-     const char *PortSettings[ 5 ];
-     #define PortFile PortSettings[ 0 ]
-     #define PortDBits PortSettings[ 1 ]
-     #define PortSBits PortSettings[ 2 ]
-     #define PortParity PortSettings[ 3 ]
-     #define PortSpeed PortSettings[ 4 ]
-     
-     if ( !( config_setting_lookup_string ( port_setting, "file", &(PortFile) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( port_setting, "dbits", &(PortDBits) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( port_setting, "sbits", &(PortSBits) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( port_setting, "parity", &(PortParity) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( port_setting, "speed", &(PortSpeed) ) == CONFIG_TRUE ) )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'Port' не полная" );
-         return -1;
-     }
-     
-     ACfg->Port = mymalloc ( sizeof ( port_cfg_t ) );
-     ACfg->Port->DBits = mystrdup ( PortDBits );
-     ACfg->Port->SBits = mystrdup ( PortSBits );
-     ACfg->Port->Speed = mystrdup ( PortSpeed );
-     ACfg->Port->Parity = mystrdup ( PortParity );
-     ACfg->Port->File = mystrdup ( PortFile );
-     
-     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Настройки порта успешно считаны." );
-     
-     return 0;
-     
-     #undef PortFile
-     #undef PortDBits
-     #undef PortSBits
-     #undef PortParity
-     #undef PortSpeed
-        
-}
-
-// чтение конфигурации лога
-static
-int __config_read_log ( config_t *cfg, askue_cfg_t *ACfg )
-{
-     config_setting_t *setting = config_lookup ( cfg, "Log" ); // поиск сети
-     if ( setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'Log'" );
-         return -1;
-     }
-    
-     const char *LogFile;
-     const char *LogLines;
-     const char *LogMode;
-     if ( !( config_setting_lookup_string ( setting, "file", &(LogFile) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( setting, "lines", &(LogLines) ) == CONFIG_TRUE &&
-             config_setting_lookup_string ( setting, "mode", &(LogMode) ) == CONFIG_TRUE ) )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'Log' не полная" );
-         return -1;
-     }
-     
-     ACfg->Log = mymalloc ( sizeof ( log_cfg_t ) );
-     ACfg->Log->File = mystrdup ( LogFile );
-     ACfg->Log->Lines = strtol ( LogLines, NULL, 10 );
-     ACfg->Log->Mode = mystrdup ( LogMode );
-     
-     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Настройки лога успешно считаны." );
-     
-     return 0;
+    const char *JnlFlashback = _get_journal_flashback ( setting, Verbose );
+    if ( JnlFlashback == NULL )
+    {
+        // значение по умолчанию
+        return ( size_t ) 0;
+    }
+    else
+    {
+        // значение из конфига
+        return (size_t) strtoul ( JnlFlashback, NULL, 10 );
+    }
 }
 
 // чтение конфигурации базы
 static
-int __config_read_db ( config_t *cfg, askue_cfg_t *ACfg )
+int __config_read_journal ( const config_t *cfg, askue_cfg_t *ACfg )
 {
-     config_setting_t *setting = config_lookup ( cfg, "Journal" ); // поиск сети
-     if ( setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'Journal'" );
-         return -1;
-     }
+    // флаг дополнительных сообщений
+    int Verbose = TESTBIT ( ACfg->Flag, ASKUE_FLAG_VERBOSE );
+    // данные о журнале
+    const config_setting_t *Jnl = _get_journal ( cfg );
+    if ( Jnl == NULL ) return ASKUE_ERROR;
+    // файл журнала
+    const char *JnlFile = _get_journal_file ( Jnl );
+    if ( JnlFile == NULL ) return ASKUE_ERROR;
+    // память под журнал
+    ACfg->Journal = mymalloc ( sizeof ( journal_cfg_t ) );
+    // размер в днях 
+    ACfg->Journal->Size = _set_journal_size ( Jnl, Verbose );
+    // флешбек в днях
+    ACfg->Journal->Flashback = _set_journal_flashback ( Jnl, Verbose );
+    // значение из конфига
+    ACfg->Journal->File = mystrdup ( JnlFile );
+    // доп.сообщение
+    if ( Verbose )
+        askue_config_ok ( "Настройки журнала успешно считаны." );
      
-     const char *JnlFile;
-     if ( config_setting_lookup_string ( setting, "file", &(JnlFile) ) != CONFIG_TRUE )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'Journal' не полная" );
-         return -1;
-     }
-     
-     const char *JnlSize;
-     if ( config_setting_lookup_string ( setting, "size", &(JnlSize) ) != CONFIG_TRUE )
-     {
-         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "ERROR", "Отсутствует запись 'Journal.size'" );
-         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.size = 3'" );
-         ACfg->Journal->Size = 3;
-     }
-     else
-     {
-         ACfg->Journal->Size = (size_t) strtol ( JnlSize, NULL, 10 );
-     }
-     
-     const char *JnlFlashback;
-     if ( config_setting_lookup_string ( setting, "flashback", &(JnlFlashback) ) != CONFIG_TRUE )
-     {
-         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "ERROR", "Отсутствует запись 'Journal.flashback'" );
-         verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Установка значения по умолчанию 'Journal.flashback = 0'" );
-         ACfg->Journal->Flashback = 0;
-     }
-     else
-     {
-         ACfg->Journal->Flashback = (size_t) strtol ( JnlFlashback, NULL, 10 );
-     }
-     
-     ACfg->Journal = mymalloc ( sizeof ( journal_cfg_t ) );
-     ACfg->Journal->File = mystrdup ( JnlFile );
-     
-     verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Настройки журнала успешно считаны." );
-     
-     return 0;
+    return ASKUE_SUCCESS;
 }
 
-// чтение скрипта и его параметра
+/**********************************************************************/
+
+// поиск описания в конфиге лога
 static
-void __config_script ( char **ScriptName, char **ScriptParametr, const char *script )
+const config_setting_t* _get_log ( const config_t *cfg )
+{
+    config_setting_t *setting = config_lookup ( cfg, "Log" ); // поиск сети
+    if ( setting == NULL )
+    {
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Log'" );
+        return ( const config_setting_t* ) NULL;
+    }
+    return ( const config_setting_t* ) setting;
+}
+
+// получить параметры лога
+static
+int _get_log_params ( const config_setting_t *setting, const char **File, const char **Lines, const char **Mode, int Verbose )
+{
+    if ( config_setting_lookup_string ( setting, "file", File ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Log.file'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( setting, "mode", Mode ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Log.Mode'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( setting, "lines", Lines ) == CONFIG_FALSE )
+    {
+        askue_config_error ( "Отсутствует запись 'Log.lines'." );
+        if ( Verbose ) 
+            askue_config_ok ( "Установка значения по умолчанию 'Log.lines = 1000'" );
+        *Lines = NULL;
+        return ASKUE_SUCCESS;
+    }
+    else
+    {
+        return ASKUE_SUCCESS;
+    }
+}
+
+// установить параметры
+static
+void _set_log_params ( askue_cfg_t *ACfg, const char *File, const char *Lines, const char *Mode )
+{
+    ACfg->Log->File = mystrdup ( File );
+    ACfg->Log->Lines = ( size_t ) ( ( Lines != NULL ) ? strtoul ( Lines, NULL, 10 ) : 1000 );
+    ACfg->Log->Mode = mystrdup ( Mode );
+}
+
+// чтение конфигурации лога
+static
+int __config_read_log ( const config_t *cfg, askue_cfg_t *ACfg )
+{
+    // флаг дополнительных сообщений
+    int Verbose = TESTBIT ( ACfg->Flag, ASKUE_FLAG_VERBOSE );
+    // корневая структура конфигурации лога
+    const config_setting_t *Log = _get_log ( cfg );
+    if ( Log == NULL ) return ASKUE_ERROR;
+    // поиск параметров лога
+    const char *File, *Lines, *Mode;
+    if ( _get_log_params ( Log, &File, &Lines, &Mode, Verbose ) == ASKUE_ERROR )
+    {
+        return ASKUE_ERROR;
+    }
+    // выделить память 
+    ACfg->Log = mymalloc ( sizeof ( log_cfg_t ) );
+    // скопировать данные из текстового конфига
+    _set_log_params ( ACfg, File, Lines, Mode );
+    // дополнительное сообщение
+    if ( Verbose )
+        askue_config_ok ( "Настройки лога успешно считаны." );
+     
+    return ASKUE_SUCCESS;
+}
+
+/**********************************************************************/
+
+// поиск описания порта в конфигурации
+static
+const config_setting_t* _get_port ( const config_t *cfg )
+{
+    config_setting_t *setting = config_lookup ( cfg, "Port" );
+    if ( setting == NULL )
+    {
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Port'." );
+        return ( const config_setting_t* ) NULL;
+    }
+    return ( const config_setting_t* ) setting;
+}
+
+// поиск параметров в конфиге
+static 
+int _get_port_params ( const config_setting_t *port_setting, const char **File, 
+                                                              const char **DBits, 
+                                                              const char **SBits, 
+                                                              const char **Parity,
+                                                              const char **Speed )
+{
+    if ( config_setting_lookup_string ( port_setting, "file", File ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Port.file'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( port_setting, "dbits", DBits ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Port.databits'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( port_setting, "sbits", SBits ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Port.stopbits'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( port_setting, "parity", Parity ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Port.parity'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( port_setting, "speed", Speed ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Port.speed'." );
+        return ASKUE_ERROR;
+    }
+    else
+    {
+        return ASKUE_SUCCESS;
+    }
+}
+
+// установить параметры
+static
+void _set_port_params ( askue_cfg_t *ACfg, const char *File,
+                                             const char *DBits,
+                                             const char *SBits,
+                                             const char *Parity,
+                                             const char *Speed )
+{
+    // Заполнить память данными
+    ACfg->Port->DBits = mystrdup ( DBits );
+    ACfg->Port->SBits = mystrdup ( SBits );
+    ACfg->Port->Speed = mystrdup ( Speed );
+    ACfg->Port->Parity = mystrdup ( Parity );
+    ACfg->Port->File = mystrdup ( File );
+}
+
+// чтение конфигурации порта
+static
+int __config_read_port ( const config_t *cfg, askue_cfg_t *ACfg )
+{
+    // флаг дополнительных сообщений
+    int Verbose = TESTBIT ( ACfg->Flag, ASKUE_FLAG_VERBOSE );
+    // поиск корневой структуры конфигурации порта
+    const config_setting_t *Port = _get_port ( cfg );
+    if ( Port == NULL ) return ASKUE_ERROR;
+    // параметры порта
+    const char *File, *DBits, *SBits, *Parity, *Speed;
+    // поиск параметров порта
+    if ( _get_port_params ( Port, &File, &DBits, &SBits, &Parity, &Speed ) == ASKUE_ERROR )
+        return ASKUE_ERROR;
+    // выделить память
+    ACfg->Port = mymalloc ( sizeof ( port_cfg_t ) );
+    // заполнить параметры
+    _set_port_params ( ACfg, File, DBits, SBits, Parity, Speed );
+    
+    // доп. сообщение 
+    if ( Verbose )
+        askue_config_ok ( "Настройки порта успешно считаны." );
+     
+    return ASKUE_SUCCESS;
+}
+
+/**********************************************************************/
+
+// поиск параметров конкретного устройства
+static 
+int _get_the_device_param ( const config_setting_t *next_device, long int *Id,
+                                                                  const char **Name,
+                                                                  const char **Type,
+                                                                  const char **Timeout, int Verbose )
+{
+    if ( config_setting_lookup_int ( next_device, "id", Id ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Devices.id'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( next_device, "name", Name ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Devices.name'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( next_device, "type", Type ) == CONFIG_FALSE )
+    {
+        askue_config_fail ( "Отсутствует запись 'Devices.type'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( next_device, "timeout", Timeout ) == CONFIG_FALSE )
+    {
+        askue_config_error ( "Отсутствует запись 'Devices.timeout'." );
+        if ( Verbose ) 
+            askue_config_ok ( "Установка значения по умолчанию 'Devices.timeout = 5000'" );
+        *Timeout = NULL;
+        return ASKUE_SUCCESS;
+    }
+    else
+    {
+        return ASKUE_SUCCESS;
+    }
+}
+            
+// установка параметров устройства
+static
+void _set_the_device_param ( device_cfg_t *Device, const char *Name, 
+                                                     const char *Type,
+                                                     const char *Timeout,
+                                                     long int Id, )
+{
+    Device->Name = mystrdup ( Name );
+    Device->Type = mystrdup ( Type );
+    Device->Timeout = ( Timeout != NULL ) ? ( uint32_t ) strtoul ( Timeout, NULL, 10 ) : 5000;
+    Device->Id = Id;
+}
+                                                
+// разбор описания устройства
+static
+int __config_read_the_device ( const config_setting_t *next_device, askue_cfg_t *ACfg, size_t DeviceAmount )
+{
+    // поиск обязательных параметров: id, name, type
+    const char *Name, *Type, *Timeout;
+    long int Id;
+    if ( _get_the_device_param ( next_device, &Id, &Name, &Type, &Timeout, TESTBIT ( ACfg->Flag, ASKUE_FLAG_VERBOSE ) ) == ASKUE_ERROR )
+        return ASKUE_ERROR;
+    // определить id
+    if ( Id > DeviceAmount - 1 ) // id выходит за границы
+    {
+        // сообщение об ошибке
+        askue_config_fail ( "Запись 'Device.id' выходит за границы ( кол-во элементов записи 'Device' )." );
+        return ASKUE_ERROR;
+    }
+    // копировать данные в конфигурацию
+    _set_the_device_param ( ACfg->Device + Id, Name, Type, Timeout, Id );
+    
+    return ASKUE_SUCCESS;
+}
+
+// поиск описания списка устройств
+static
+const config_setting_t* _get_device_list ( const config_t *cfg )
+{
+    config_setting_t *setting = config_lookup ( cfg, "Devices" );
+    if ( setting == NULL )
+    {
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Devices'." );
+        return ( const config_setting_t* ) NULL;
+    }
+    else
+    {
+        return ( const config_setting_t* ) setting;
+    }
+}
+
+// инициализировать конкретное устройство
+static
+void __config_init_the_device ( device_cfg_t *TheDevice )
+{
+    TheDevice->Name = NULL;
+    TheDevice->Type = NULL;
+    TheDevice->Timeout = 0;
+    TheDevice->Id = 0;
+}
+
+// инициализировать устройства
+static
+void __config_init_device ( askue_cfg_t *ACfg, size_t DeviceAmount )
+{
+    for ( size_t i = 0; i < DeviceAmount; i++ )
+    {
+        __config_init_the_device ( ACfg->Device + i );
+    }
+}
+
+// чтение конфигурации списка устройств
+static
+int __config_read_device ( const config_t *cfg, askue_cfg_t *ACfg )
+{
+    // корневая структура списка устройств
+    const config_setting_t *DeviceList = _get_device_list ( cfg );
+    if ( DeviceList == NULL ) return ASKUE_ERROR;
+    // кол-во устройств в списке
+    size_t Amount = config_setting_length ( DeviceList ) + 2;
+    // выделить память
+    ACfg->Device = ( device_cfg_t* ) mymalloc ( sizeof ( device_cfg_t ) * ( Amount ) );
+    
+    __config_init_device ( ACfg, Amount );
+    
+    // Заполнить память
+    // Нулевое устройство - это АСКУЭ
+    ACfg->Device->Name = mystrdup ( "АСКУЭ" );
+    ACfg->Device->Type = mystrdup ( "Сервер задач" );
+    ACfg->Device->Timeout = 0;
+    ACfg->Device->Id = 0;
+    // остальные устройства
+    int Result = ASKUE_SUCCESS; // результат работы
+    for ( size_t i = 0; i < Amount && Result != ASKUE_ERROR; i++ )
+    {
+        // описание устройства
+        config_setting_t *next_device = config_setting_get_elem ( DeviceList, i );
+        // разбор описания устройства
+        Result = __config_read_the_device ( next_device, ACfg, Amount );
+    }
+    return Result;
+}
+
+/**********************************************************************/
+
+// поиск описания сети
+static
+const config_setting_t* _get_network ( const config_t *cfg )
+{
+    config_setting_t *Network = config_lookup ( cfg, "Network" );
+    if ( Network == NULL )
+    {
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Network'." );
+        return ( const config_setting_t* ) Network;
+    }
+    else
+    {
+        return ( const config_setting_t* ) NULL;
+    }
+}
+
+// читать структу сети
+static
+int __config_read_network ( const config_t *cfg, askue_cfg_t *ACfg )
+{
+    // корневая структура описывающая сеть
+    const config_setting_t* Network = _get_network ( cfg );
+    if ( Network == NULL ) return ASKUE_ERROR;
+    // размер сети
+    size_t Size = config_setting_length ( Network );
+    ACfg->NetworkSize = Size + 1;
+    // выделить память
+    ACfg->Network = mymalloc ( ( Size + 1 ) * sizeof ( uint32_t ) );
+    // перебор всех рёбер графа
+    for ( size_t i = 0; i < Size; i++ )
+    {
+        // получить ребро графа
+        config_setting_t *edge = config_setting_get_elem ( Network, i );
+        // id устройства через которое подключаемся
+        int Base = config_setting_get_int_elem ( edge, 0 );
+        // id устройства к которому подключаемся
+        int Remote = config_setting_get_int_elem ( edge, 1 );
+        // запись структуры в конфиг
+        ACfg->Network[ Remote ] = ( uint32_t ) Base;
+    }
+    return ASKUE_SUCCESS;
+}
+
+/**********************************************************************/
+
+// разделение скрипта на имя и параметр
+static
+void _get_script ( char **ScriptName, char **ScriptParametr, const char *script )
 {
     const char *Parametr = strchr ( script, ':' );
     
     if ( Parametr != NULL )
     {
-        size_t len = (size_t)( (const char*) Parametr - (const char*)script );
+        size_t len = ( size_t ) ( ( const char* ) Parametr - ( const char* ) script );
         *ScriptName = mystrndup ( script, len );
         
         Parametr++;
@@ -367,368 +545,525 @@ void __config_script ( char **ScriptName, char **ScriptParametr, const char *scr
     }
 }
 
-
 // чтение скрипта и его параметра
 static
-void __config_report ( char **ReportName, char **ReportParametr, const char *report )
+script_cfg_t __config_script ( const char *script )
 {
-    const char *Parametr = strchr ( report, ':' );
-    
-    if ( Parametr != NULL )
+    char *ScriptName, *ScriptParametr;
+    _get_script ( &ScriptName, &ScriptParametr, script );
+    return ( script_cfg_t ) { ScriptName, ScriptParametr };
+}
+
+/**********************************************************************/
+
+// поиск параметров коммуникации
+static
+int _get_the_comm_params ( const config_setting_t *TheComm, long int *Id,
+                                                             const char **Script )
+{
+    if ( config_setting_lookup_int ( TheComm, "id", Id ) == CONFIG_FALSE )
     {
-        size_t len = (size_t)( (const char*) Parametr - (const char*)report );
-        *ReportName = mystrndup ( report, len );
-        
-        Parametr++;
-        while ( *Parametr != '\0' && isspace ( *Parametr ) )
-            Parametr++;
-        *ReportParametr = mystrdup ( Parametr );
+        // сообщение об ошибке
+        askue_config_fail ( "Отсутствует запись 'Communication.id'." );
+        return ASKUE_ERROR;
+    }
+    else if ( config_setting_lookup_string ( TheComm, "script", Script ) == CONFIG_FALSE )
+    {
+        // сообщение об ошибке
+        askue_config_fail ( "Отсутствует запись 'Communication.script'." );
+        return ASKUE_ERROR;
     }
     else
     {
-        *ReportParametr = NULL;
-        *ReportName = mystrdup ( report );
+        return ASKUE_SUCCESS;
     }
 }
 
-// чтение конфигурации одного типа
+// прочитать способ коммуникации
 static
-void __config_read_type ( config_setting_t *setting, askue_cfg_t *ACfg, size_t Number )
+int __config_read_the_comm ( const config_setting_t *TheComm, askue_cfg_t *ACfg, size_t Index )
 {
-    ACfg->TypeList[ Number ] = mymalloc ( sizeof ( type_cfg_t ) );
+    const char *Script;
+    long int Id;
+    if ( _get_the_comm_params ( TheComm, &Id, &Script ) == ASKUE_ERROR ) return ASKUE_ERROR;
     
-    size_t ScriptAmount = (size_t) config_setting_length ( setting );
-    ACfg->TypeList[ Number ]->Script = mymalloc ( sizeof ( script_cfg_t* ) * ( ScriptAmount + 1 ) );
-    for ( size_t i = 0; i < ScriptAmount + 1; i++ )
-    {
-        ACfg->TypeList[ Number ]->Script[ i ] = NULL;
-    } 
-    const char *type = config_setting_name ( setting );
-     ACfg->TypeList[ Number ]->Name = mystrdup ( type );
-     
-    for ( size_t i = 0; i < ScriptAmount; i++ )
-    {
-        
-        const char *script = config_setting_get_string_elem ( setting, i );
-        //ACfg->TypeList[ Number ]->Script[ i ] = mystrdup ( script );
-        ACfg->TypeList[ Number ]->Script[ i ] = mymalloc ( sizeof ( script_cfg_t ) );
-        char *ScriptName, *ScriptParametr;
-        __config_script ( &ScriptName, &ScriptParametr, script );
-        ACfg->TypeList[ Number ]->Script[ i ]->Name = ScriptName;
-        ACfg->TypeList[ Number ]->Script[ i ]->Parametr  =ScriptParametr;
-    }
+    // определить id
+    // присвоить коммуникации описание устройства
+    comm_cfg_t *Comm = ACfg->Comm + Index;
+    Comm->Device = ACfg->Device + Id;
+    // прочитать скрипт для выполнения соединения
+    Comm->Script = mymalloc ( sizeof ( script_cfg_t ) );
+    *( Comm->Script ) = __config_script ( Script );
+    
+    return ASKUE_SUCCESS;
 }
 
-// чтение конфигурации типов устройств и их обработчиков
-static 
-int __config_read_type_list ( config_t *cfg, askue_cfg_t *ACfg )
-{
-     config_setting_t *setting = config_lookup ( cfg, "ScriptList" ); // поиск сети
-     if ( setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'ScriptList'" );
-         return -1;
-     }
-     
-     size_t TypeAmount = (size_t) config_setting_length ( setting );
-     ACfg->TypeList = mymalloc ( sizeof ( type_cfg_t* ) * ( TypeAmount + 1 ) );
-     for ( size_t i = 0; i < TypeAmount + 1; i++ )
-     {
-         ACfg->TypeList[ i ] = NULL;
-     }
-     
-     for ( size_t i = 0; i < TypeAmount; i++ )
-     {
-         config_setting_t *subsetting = config_setting_get_elem ( setting, i );
-         __config_read_type ( subsetting, ACfg, i );
-     }
-     
-     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список типов успешно считан." );
-     
-     return 0;
-}
-
-// поиск типа устройства
+// поиск списка коммуникаций
 static
-type_cfg_t* __find_device_type ( askue_cfg_t *ACfg, const char *type )
+const config_setting_t* _get_comm ( const config_t *cfg )
 {
-    type_cfg_t *Result = NULL; 
-    for ( size_t i = 0; ACfg->TypeList[ i ] != NULL && Result == NULL; i++ )
+    config_setting_t *Communication = config_lookup ( cfg, "Communication" );
+    if ( Communication == NULL )
     {
-        if ( !strcmp ( ACfg->TypeList[ i ]->Name, type ) )
-            Result = ACfg->TypeList[ i ];
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Communication'." );
+        return ( const config_setting_t* ) NULL;
+    }
+    return ( const config_setting_t* ) Communication;
+}
+
+// конфигурировать следующую коммуникацию
+static
+int __config_next_comm ( const config_setting_t *Comm, askue_cfg_t *ACfg, size_t offset )
+{
+    config_setting_t *TheComm = config_setting_get_elem ( Comm, offset );
+    return __config_read_the_comm ( TheComm, ACfg, offset );
+}
+
+// конфигурирование всех коммуникаций
+static 
+int __config_each_comm ( const config_setting_t *Comm, askue_cfg_t *ACfg )
+{
+    int Result = ASKUE_SUCCESS;
+    for ( size_t i = 0; i < ACfg->CommAmount && Result != ASKUE_ERROR; i++ )
+    {
+        Result = __config_next_comm ( Comm, ACfg, i );
     }
     return Result;
 }
 
-
-
-// расшифровка класса устройств
+// инициализировать память конкретной конфигурации
 static
-device_class_t __what_class ( const char *DeviceClass )
+void __config_init_the_comm ( comm_cfg_t *TheComm )
 {
-    if ( !strcmp ( DeviceClass, "counter" ) )
+    TheComm->Device = NULL;
+    TheComm->Script = NULL;
+}
+
+// инициализировать память, выделенную под коммуникации
+static
+void __config_init_comm ( askue_cfg_t *Cfg )
+{
+    for ( size_t i = 0; i < Cfg->CommAmount; i++ )
     {
-        return Askue_Counter;
-    }
-    else if ( !strcmp ( DeviceClass, "modem" ) )
-    {
-        return Askue_Modem;
-    }
-    else
-    {
-        return Askue_NoClass;
+        __config_init_the_comm ( Cfg->Comm + i );
     }
 }
 
-// получить сегмент
+// читать структу коммуникаций
 static
-device_segment_t __what_segment ( const char *DeviceSegment )
+int __config_read_comm ( const config_t *cfg, askue_cfg_t *ACfg )
 {
-    if ( !strcmp ( DeviceSegment, "remote" ) )
+    // корневая структура описывающая коммуникации
+    const config_setting_t *Communication = _get_comm ( cfg );
+    if ( Communication == NULL ) return ASKUE_ERROR;
+    
+    // кол-во способов коммуникации
+    size_t Amount = config_setting_length ( Communication );
+    ACfg->CommAmount = Amount;
+    // выделить память
+    ACfg->Comm = mymalloc ( ( Amount ) * sizeof ( comm_cfg_t ) );
+    // инициализировать память
+    __config_init_comm ( ACfg );
+    // прочитать коммуникации
+    return __config_each_comm ( Communication, ACfg );
+}
+
+/**********************************************************************/
+
+static
+void __config_init_the_script ( script_cfg_t *Script )
+{
+    Script->Name = NULL;
+    Script->Parametr = NULL;
+}
+
+static
+void __config_init_script ( target_cfg_t *CurTarget )
+{
+    for ( size_t i = 0; i < CurTarget->ScriptAmount; i++ )
     {
-        return Askue_Remote;
-    }
-    else if ( !strcmp ( DeviceSegment, "local" ) )
-    {
-        return Askue_Local;
-    }
-    else
-    {
-        return Askue_NoSegment;
+        __config_init_the_script ( CurTarget->Script + i );
     }
 }
 
-// чтение конфигурации одного устройства
+// прочитать цель задачи
 static
-int __config_read_device ( config_setting_t *setting, askue_cfg_t *ACfg, device_cfg_t *Device )
-{    
-    const char *DeviceSetting[ 6 ];
-    
-    #define DeviceClass DeviceSetting[ 0 ]
-    #define DeviceType DeviceSetting[ 1 ]
-    #define DeviceName DeviceSetting[ 2 ]
-    #define DeviceTimeout DeviceSetting[ 3 ]
-    #define DeviceSegment DeviceSetting[ 4 ]
-    #define DeviceId DeviceSetting[ 5 ]
-    
-    if ( !( config_setting_lookup_string ( setting, "class", &(DeviceClass) ) == CONFIG_TRUE && 
-            config_setting_lookup_string ( setting, "type", &(DeviceType) ) == CONFIG_TRUE &&  
-            config_setting_lookup_string ( setting, "name", &(DeviceName) ) == CONFIG_TRUE ) )
-    {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Запись 'DeviceList' не полная" );
-         return -1;
-    }
-    // класс
-    Device->Class = __what_class ( DeviceClass );
-    if ( Device->Class == Askue_NoClass )
-    {
-         write_msg ( stderr, "Конфигурация", "FAIL", "Не верный класс устройства" );
-         return -1;
-    }
+void __config_target ( target_cfg_t *CurTarget, const config_setting_t *TheTarget )
+{
     // имя
-    Device->Name = mystrdup( DeviceName );
-    // тип
-    Device->Type = __find_device_type ( ACfg, DeviceType );
-    if ( Device->Type == NULL )
+    const char *Name = config_setting_name ( TheTarget );
+    CurTarget->Type = mystrdup ( Name );
+    // кол-во скриптов
+    CurTarget->ScriptAmount = config_setting_length ( TheTarget );
+    // выделить память
+    CurTarget->Script = mymalloc ( sizeof ( script_cfg_t ) * CurTarget->ScriptAmount );
+    __config_init_script ( CurTarget );
+    // перебор скриптов
+    for ( size_t i = 0; i < CurTarget->ScriptAmount; i++ )
     {
-        write_msg ( stderr, "Конфигурация", "FAIL", "Нет скриптов для данного типа" );
-        return -1;
+        const char *script = config_setting_get_string_elem ( TheTarget, i );
+        char *ScriptName, *ScriptParametr;
+        _get_script ( &ScriptName, &ScriptParametr, script );
+        ( CurTarget->Script + i )->Name = ScriptName;
+        ( CurTarget->Script + i )->Parametr = ScriptParametr;
     }
-    
-    // id
-    if ( config_setting_lookup_string ( setting, "id", &(DeviceId) ) == CONFIG_TRUE )
+}
+
+static 
+void __config_init_the_target ( target_cfg_t *TheTarget )
+{
+    TheTarget->Type = NULL;
+    TheTarget->Script = NULL;
+    TheTarget->ScriptAmount = 0;
+}
+
+static
+void __config_init_target ( task_cfg_t *TheTask )
+{
+    for ( size_t i = 0; i < TheTask->TargetAmount; i++ )
     {
-        Device->Id = strtol ( DeviceId, NULL, 10 );
+        __config_init_the_target ( TheTask->Target + i );
     }
-    // таймаут
-    if ( config_setting_lookup_string ( setting, "timeout", &(DeviceTimeout) ) == CONFIG_TRUE )
+}
+
+// прочитать способ коммуникации
+static
+int __config_read_the_task ( const config_setting_t *TheTask, askue_cfg_t *ACfg, size_t Index )
+{
+    // кол-во целей
+    size_t Amount = config_setting_length ( TheTask );
+    // выделить память
+    task_cfg_t *curTask = ACfg->Task + Index;
+    curTask->TargetAmount = Amount;
+    curTask->Target = mymalloc ( sizeof ( target_cfg_t ) * Amount );
+    __config_init_target ( curTask );
+    // перебор целей
+    for ( size_t i = 0; i < Amount; i++ )
     {
-        Device->Timeout = strtol ( DeviceTimeout, NULL, 10 );
+        target_cfg_t *curTarget = curTask->Target + i;
+        config_setting_t *TheTarget = config_setting_get_elem ( TheTask, i );
+        __config_target ( curTarget, TheTarget );
     }
-    else if ( Device->Class == Askue_Counter )
+}
+
+// Найти описание списка задач
+static
+const config_setting_t* _get_task ( const config_t *cfg )
+{
+    config_setting_t *Task = config_lookup ( cfg, "Task" );
+    if ( Task == NULL )
     {
-        write_msg ( stderr, "Конфигурация", "FAIL", "Нет таймаута ожидания для счётчика" );
-        return -1;
+        // сообщение об ошибке
+        askue_config_fail ( "В конфигурации отсутствует запись 'Task'." );
+        return ( const config_setting_t* ) NULL;
     }
-    // сегмент
-    if ( config_setting_lookup_string ( setting, "segment", &(DeviceSegment) ) == CONFIG_TRUE )
+    return ( const config_setting_t* ) Task;
+}
+
+// конфигурирование следующей задачи
+static
+int __config_next_task ( const config_setting_t* Task, askue_cfg_t *ACfg, size_t offset )
+{
+    config_setting_t *TheTask = config_setting_get_elem ( Task, offset );
+    return __config_read_the_task ( TheTask, ACfg, offset );
+}
+
+// конфигурирование всех задач
+static
+int __config_each_task ( const config_setting_t* Task, askue_cfg_t *ACfg, size_t TaskAmount )
+{
+    int Result = ASKUE_SUCCESS;
+    for ( size_t i = 0; ( i < TaskAmount ) && ( Result != ASKUE_ERROR ); i++ )
     {
-        Device->Segment = __what_segment ( DeviceSegment );
-        if ( Device->Segment == Askue_NoSegment )
-        {
-             write_msg ( stderr, "Конфигурация", "FAIL", "Не указан сегмент сети" );
-             return -1;
-        }
+        Result = __config_next_task ( Task, ACfg, i );
+    }
+    return Result;
+}
+
+static
+void __config_init_the_task ( task_cfg_t *TheTask )
+{
+    TheTask->Target = NULL;
+    TheTask->Script = NULL;
+}
+
+// инициализировать память под задачи
+static
+void __config_init_task ( askue_cfg_t *ACfg, size_t TaskAmount ) 
+{
+    for ( size_t i = 0; i < TaskAmount; i++ )
+    {
+        __config_init_the_task ( ACfg->Task + i );
+    }
+}
+
+// читать структу задач
+static
+int __config_read_task ( const config_t *cfg, askue_cfg_t *ACfg )
+{
+    // корневая структура описывающая задачи
+    const config_setting_t* Task = _get_task ( cfg );
+    // кол-во способов коммуникации
+    size_t Amount = config_setting_length ( Task ) + 1;
+    // выделить память
+    ACfg->Task = mymalloc ( ( Amount ) * sizeof ( task_cfg_t ) );
+    __config_init_task ( ACfg, Amount );
+    // прочитать задачи
+    return __config_each_task ( Task, ACfg, Amount );
+}
+
+/**********************************************************************/
+
+// сообщение об ошибке чтения конфига
+static
+void _say_ConfigReadFail ( char *Buffer, const config_t *cfg )
+{
+    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "%s at line %d.", config_error_text ( cfg ), config_error_line ( cfg ) ) > 0 )
+        askue_config_fail ( Buffer );
+}
+
+// сообщение об успешном чтении конфига
+static
+int _say_ConfigReadOk ( char *Buffer )
+{
+    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "Файл '%s' - прочитан.", ASKUE_FILE_CONFIG ) > 0 )
+    {
+        askue_config_ok ( Buffer );
+        return ASKUE_SUCCESS;
     }
     else
     {
-        Device->Segment = Askue_Local;
+        return ASKUE_ERROR;
     }
-    
-    #undef DeviceClass
-    #undef DeviceType
-    #undef DeviceName
-    #undef DeviceTimeout
-    #undef DeviceSegment
-    #undef DeviceId
-    
-    return 0;
 }
 
-// чтение конфигурации списка устройств
-static
-int __config_read_device_list ( config_t *cfg, askue_cfg_t *ACfg )
+// читать все части конфига
+static 
+int __config_read ( const config_t *cfg, askue_cfg_t *ACfg )
 {
-     config_setting_t *setting = config_lookup ( cfg, "DeviceList" ); // поиск сети
-     if ( setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'DeviceList'" );
-         return -1;
-     }
-     
-     size_t DeviceAmount = (size_t) config_setting_length ( setting );
-     ACfg->DeviceList = mymalloc ( sizeof( device_cfg_t* ) * ( DeviceAmount + 1 ) );
-     for ( size_t i = 0; i < DeviceAmount + 1; i++ )
-     {
-         ACfg->DeviceList[ i ] = NULL;
-     }
-     int Result = 0;
-     for ( size_t i = 0; i < DeviceAmount && !Result; i++ )
-     {
-         config_setting_t *subsetting = config_setting_get_elem ( setting, i );
-         ACfg->DeviceList[ i ] = mymalloc ( sizeof ( device_cfg_t ) );
-         Result = __config_read_device ( subsetting, ACfg, ACfg->DeviceList[ i ] );
-     }
-     if ( Result ) return -1;
-     
-     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список устройств успешно cчитан." );
-     
-     return 0;
+    return __config_read_journal ( cfg, ACfg ) == 0 &&
+            __config_read_log ( cfg, ACfg ) == 0 &&
+            __config_read_port ( cfg, ACfg ) == 0 && 
+            __config_read_device ( cfg, ACfg ) == 0 &&
+            __config_read_network ( cfg, ACfg ) == 0 &&
+            __config_read_comm ( cfg, ACfg ) == 0 &&
+            __config_read_task ( cfg, ACfg ) == 0;
 }
 
-// чтение конфигурации отчётов
-int __config_read_report_list ( config_t *cfg, askue_cfg_t *ACfg )
-{
-     config_setting_t *setting = config_lookup ( cfg, "ReportList" ); // поиск сети
-     if ( setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "FAIL", "В конфигурации отсутствует запись 'ReportList'" );
-         return -1;
-     }
-     
-     size_t ReportAmount = (size_t) config_setting_length ( setting );
-     ACfg->ReportList = mymalloc ( sizeof( report_cfg_t* ) * ( ReportAmount + 1 ) );
-     for ( size_t i = 0; i < ReportAmount + 1; i++ )
-     {
-         ACfg->ReportList[ i ] = NULL;
-     }
-     for ( size_t i = 0; i < ReportAmount; i++ )
-     {
-         ACfg->ReportList[ i ] = mymalloc ( sizeof( report_cfg_t ) );
-         const char *Report = config_setting_get_string_elem ( setting, i );
-         __config_report ( &(ACfg->ReportList[ i ]->Name), 
-                           &(ACfg->ReportList[ i ]->Parametr), 
-                           Report );
-     }
-     
-     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список отчётов успешно считан." );
-     
-     return 0;
-}
-
-// чтение конфигурации базового модема
-int __config_read_local_gate ( config_t *cfg, askue_cfg_t *ACfg )
-{
-     config_setting_t *setting = config_lookup ( cfg, "LocalGate" ); // поиск сети
-     if ( setting == NULL )
-     {
-         verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "ERROR", "В конфигурации отсутствует запись 'LocalGate'" );
-         return 0;
-     }
-     
-     ACfg->LocalGate = mymalloc ( sizeof( gate_cfg_t ) );
-     ACfg->LocalGate->Device = mymalloc ( sizeof ( device_cfg_t ) );
-     int Result = __config_read_device ( setting, ACfg, ACfg->LocalGate->Device );
-     if ( Result ) 
-     {
-        return -1;
-     }
-     else
-     {
-         verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Конфигурация базового модема успешно считана." );
-         return 0;
-     }
-}
-
-
-// чтение конфигурации модемов
-int __config_read_remote_gate_list ( config_t *cfg, askue_cfg_t *ACfg )
-{
-     config_setting_t *setting = config_lookup ( cfg, "RemoteGateList" ); // поиск сети
-     if ( setting == NULL )
-     {
-         write_msg ( stderr, "Конфигурация", "ERROR", "В конфигурации отсутствует запись 'RemoteGateList'" );
-         return 0;
-     }
-     
-     size_t GateAmount = (size_t) config_setting_length ( setting );
-     ACfg->RemoteGateList = mymalloc ( sizeof( gate_cfg_t* ) * ( GateAmount + 1 ) );
-     for ( size_t i = 0; i < GateAmount + 1; i++ )
-     {
-         ACfg->RemoteGateList[ i ] = NULL;
-     }
-     int Result = 0;
-     for ( size_t i = 0; i < GateAmount && !Result; i++ )
-     {
-         config_setting_t *subsetting = config_setting_get_elem ( setting, i );
-         ACfg->RemoteGateList[ i ] = mymalloc ( sizeof( gate_cfg_t ) );
-         ACfg->RemoteGateList[ i ]->Device = mymalloc ( sizeof ( device_cfg_t ) );
-         Result = __config_read_device ( subsetting, ACfg, ACfg->RemoteGateList[ i ]->Device );
-         ACfg->RemoteGateList[ i ]->Device->Timeout = ACfg->LocalGate->Device->Timeout;
-     }
-     if ( Result ) return -1;
-     
-     verbose_msg ( ACfg->Flag, stdout, "Конфигурация", "OK", "Список удалённых модемов успешно cчитан." );
-     
-     return 0;
-}
-
-/*                      Точка чтения конфигурации                     */
+/* Точка чтения конфигурации */
 int askue_config_read ( askue_cfg_t *ACfg )
 {
-    int Result = -1; 
-    
-    config_t cfg;
+    config_t cfg; // конфиг из файла
 	config_init ( &cfg ); // выделить память под переменную с конфигурацией
     
-    char Buffer[ 256 ];
-    snprintf ( Buffer, 256, "Открываем файл: '%s'", ASKUE_FILE_CONFIG );
-    verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", Buffer );
-    
-	if ( config_read_file ( &cfg, ASKUE_FILE_CONFIG ) == CONFIG_TRUE ) // открыть и прочитать файл
+    // текстовый буфер
+    char Buffer[ _ASKUE_TBUFLEN ];
+    memset ( Buffer, '\0', _ASKUE_TBUFLEN );
+    // флаг дополнительных сообщений
+    int Verbose = TESTBIT ( ACfg->Flag, ASKUE_FLAG_VERBOSE );
+    // читать конфиг из файла
+	if ( config_read_file ( &cfg, "./askue.cfg.new" ) != CONFIG_TRUE ) // открыть и прочитать файл
 	{
-        verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Файл '/etc/askue/askue.cfg' успешно открыт." );
-        // порт
-        if ( __config_read_db ( &cfg, ACfg ) == 0 &&
-             __config_read_log ( &cfg, ACfg ) == 0 &&
-             __config_read_port ( &cfg, ACfg ) == 0 && 
-             __config_read_type_list ( &cfg, ACfg ) == 0 &&
-             __config_read_report_list ( &cfg, ACfg ) == 0 &&
-             __config_read_local_gate ( &cfg, ACfg ) == 0 &&
-             __config_read_remote_gate_list ( &cfg, ACfg ) == 0 &&
-             __config_read_device_list ( &cfg, ACfg ) == 0 )
-        {
-            verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "OK", "Считывание завершено без ошибок." );
-            Result = 0;
-        }
+        _say_ConfigReadFail ( Buffer, &cfg );
+        config_destroy ( &cfg );
+        return ASKUE_ERROR;
+    }
+    // дополнительное сообщение
+    if ( Verbose && ( _say_ConfigReadOk ( Buffer ) == ASKUE_ERROR ) )
+    {
+        config_destroy ( &cfg );
+        return ASKUE_ERROR;
+    }
+    // результат работы
+    int Result;
+    if ( __config_read ( &cfg, ACfg ) )
+    {
+        if ( Verbose ) write_msg ( stderr, "Конфигурация", "OK", "Считывание завершено без ошибок." );
+        Result = ASKUE_SUCCESS;
     }
     else
     {
-        snprintf ( Buffer, 256, "%s at line %d.", config_error_text ( &cfg ), config_error_line ( &cfg ) );
-        verbose_msg ( ACfg->Flag, stderr, "Конфигурация", "FAIL", Buffer );
+        Result = ASKUE_ERROR;
     }
+   
     config_destroy ( &cfg );
     return Result;
 }
+
+/**********************************************************************/
+
+/* Инициализация памяти конфигурации */
+void askue_config_init ( askue_cfg_t *Cfg )
+{
+    Cfg->Device = NULL;
+    Cfg->DeviceAmount = 0;
+    Cfg->Task = NULL;
+    Cfg->TaskAmount = 0;
+    Cfg->Comm = NULL;
+    Cfg->CommAmount = 0;
+    Cfg->Port = NULL;
+    Cfg->Log = NULL;
+    Cfg->Journal = NULL;
+    Cfg->Network = NULL;
+    Cfg->NetworkSize = 0;
+    Cfg->Flag = 0;
+}
+
+// Удаление данных о порте
+static
+void __destroy_port ( askue_cfg_t *ACfg )
+{
+    if ( ACfg->Port )
+    {
+        myfree ( ACfg->Port->DBits );
+        myfree ( ACfg->Port->SBits );
+        myfree ( ACfg->Port->Speed );
+        myfree ( ACfg->Port->File );
+        myfree ( ACfg->Port->Parity );
+        free ( ACfg->Port );
+    }
+}
+
+// Удаление данных о логе
+static
+void __destroy_log ( askue_cfg_t *ACfg )
+{
+    if ( ACfg->Log )
+    {
+        myfree ( ACfg->Log->File );
+        myfree ( ACfg->Log->Mode );
+        free ( ACfg->Log );
+    }
+}
+
+// Удаление данных о базе
+static
+void __destroy_journal ( askue_cfg_t *ACfg )
+{
+    if ( ACfg->Journal )
+    {
+        myfree ( ACfg->Journal->File );
+        myfree ( ACfg->Journal );
+    }
+}
+
+// удалить информацию об устройстве
+static
+void __destroy_device_info ( device_cfg_t *TheDevice )
+{
+    myfree ( TheDevice->Name );
+    myfree ( TheDevice->Type );
+}
+
+// удалить информацию о списке устройств
+static
+void __destroy_device ( askue_cfg_t *ACfg )
+{
+    for ( size_t i = 0; i < ACfg->DeviceAmount; i++ )
+    {
+        __destroy_device_info ( ACfg->Device + i );
+    }
+    
+    myfree ( ACfg->Device );
+}
+
+// удалить инфу о скрипте
+static 
+void __destroy_script_info ( script_cfg_t *TheScript )
+{
+    myfree ( TheScript->Name );
+    myfree ( TheScript->Parametr );
+}
+
+// удалить информацию о коммуникации
+static
+void __destroy_comm_info ( comm_cfg_t *TheComm )
+{
+    __destroy_script_info ( TheComm->Script );
+    myfree ( TheComm->Script );
+}
+
+// удалить информацию о списке коммуникаций
+static
+void __destroy_comm ( askue_cfg_t *ACfg )
+{
+    for ( size_t i = 0; i < ACfg->CommAmount; i++ )
+    {
+        __destroy_comm_info ( ACfg->Comm + i );
+    }
+    
+    myfree ( ACfg->Comm );
+}
+
+// удалить информацию о целе
+static
+void __destroy_target_info ( target_cfg_t *TheTarget )
+{
+    myfree ( TheTarget->Type );
+    
+    for ( int i = 0; i < TheTarget->ScriptAmount; i++ )
+    {
+        __destroy_script_info ( TheTarget->Script + i );
+    }
+    myfree ( TheTarget->Script );
+}
+
+// удалить информацию о задаче
+static
+void __destroy_task_info ( task_cfg_t *TheTask )
+{    
+    for ( size_t i = 0; i < TheTask->TargetAmount; i++ )
+    {
+        __destroy_target_info ( TheTask->Target + i );
+    }
+        
+    myfree ( TheTask->Target );
+}
+
+// удалить информацию о списке задач
+static
+void __destroy_task ( askue_cfg_t *ACfg )
+{
+    for ( size_t i = 0; i < ACfg->TaskAmount; i++ )
+    {
+        __destroy_task_info ( ACfg->Task + i ); 
+    }
+    
+    myfree ( ACfg->Task );
+}
+
+// удалить сеть
+static
+void __destroy_network ( askue_cfg_t *Cfg )
+{
+    myfree ( Cfg->Network );
+}
+
+/* Деинициализация памяти конфигурации */
+void askue_config_destroy ( askue_cfg_t *Cfg )
+{
+    __destroy_port ( Cfg );
+    askue_config_ok ( "__destroy_port() - done" );
+    __destroy_log ( Cfg );
+    askue_config_ok ( "__destroy_log() - done" );
+    __destroy_journal ( Cfg );
+    askue_config_ok ( "__destroy_journal() - done" );
+    __destroy_device ( Cfg );
+    askue_config_ok ( "__destroy_device() - done" );
+    __destroy_comm ( Cfg );
+    askue_config_ok ( "__destroy_comm() - done" );
+    __destroy_task ( Cfg );
+    askue_config_ok ( "__destroy_task() - done" );
+    __destroy_network ( Cfg );
+    askue_config_ok ( "__destroy_network() - done" );
+}
+
+#undef askue_config_fail
+#undef askue_config_error
+#undef askue_config_ok
+
+
+
+
 

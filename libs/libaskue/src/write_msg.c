@@ -25,7 +25,6 @@ void write_msg ( FILE *output, const char *Hdr, const char *St, const char *Msg 
         fputs ( " ]: " ,output );
         fputs ( Msg, output );
         fputs ( "\n" ,output );
-        //fprintf ( output, "[ %s | %s | %s ]: %s\n", asctime_str, Hdr, St, Msg );
     }
     else
     {
@@ -36,7 +35,6 @@ void write_msg ( FILE *output, const char *Hdr, const char *St, const char *Msg 
         fputs ( " | ", output );
         fputs ( St, output );
         fputs ( " ]\n" ,output );
-        //fprintf ( output, "[ %s | %s | %s ]\n", asctime_str, Hdr, St );
     }
     
     fflush ( output );

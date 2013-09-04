@@ -13,21 +13,27 @@
 static
 int parse4flag_verbose ( void *ptr, const char *value )
 {
-    return SETBIT ( ( *( uint32_t* )ptr ), ASKUE_FLAG_VERBOSE ) == 0;
+    //return SETBIT ( ( *( uint32_t* )ptr ), ASKUE_FLAG_VERBOSE ) == 0;
+    *( uint32_t* )ptr = 1;
+    return 0;
 }
 
 // установка флага протокола
 static
 int parse4flag_protocol ( void *ptr, const char *value )
 {
-    return SETBIT ( ( *( uint32_t* )ptr ), ASKUE_FLAG_PROTOCOL ) == 0;
+    //return SETBIT ( ( *( uint32_t* )ptr ), ASKUE_FLAG_PROTOCOL ) == 0;
+    *( uint32_t* )ptr = 1;
+    return 0;
 }
 
 // установка флага отладки
 static
 int parse4flag_debug ( void *ptr, const char *value )
 {
-    return SETBIT ( ( *( uint32_t* )ptr ), ASKUE_FLAG_DEBUG ) == 0;
+    //return SETBIT ( ( *( uint32_t* )ptr ), ASKUE_FLAG_DEBUG ) == 0;
+    *( uint32_t* )ptr = 1;
+    return 0;
 }
 
 // разбор флагов

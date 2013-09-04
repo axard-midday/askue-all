@@ -2,6 +2,7 @@
 #define LIBASKUE_H_
 
 #include <libaskue/time_fu.h>
+#include <libaskue/vdevice.h>
 #include <libaskue/uint8_array.h>
 #include <libaskue/write_msg.h>
 #include <libaskue/checksum.h>

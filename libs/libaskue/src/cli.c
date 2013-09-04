@@ -84,7 +84,7 @@ const char* get_long_opt_arg ( const char *argv )
 
 // проверка что опция последняя
 static
-int is_last_arg ( cli_arg_t *Option )
+int is_last_arg ( const cli_arg_t *Option )
 {
     return Option->LongName == NULL &&
             Option->ShortName == 0 &&

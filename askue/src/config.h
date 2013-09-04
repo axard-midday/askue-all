@@ -9,6 +9,7 @@ typedef struct _device_cfg_t
     char                        *Name;
     char                        *Type;
     uint32_t                    Timeout;
+    long int                    Id;
 } device_cfg_t;
 
 typedef struct _script_cfg_t
@@ -23,17 +24,10 @@ typedef struct _comm_cfg_t
     script_cfg_t                *Script;
 } comm_cfg_t;
 
-typedef struct _target_cfg_t
-{
-    char                        *Type;
-    script_cfg_t               *Script;
-    size_t                       ScriptAmount;   
-} target_cfg_t;
-
 typedef struct _task_cfg_t
 {
-    target_cfg_t              *Target;
-    size_t                      TargetAmount;
+    char                        *Target;
+    script_cfg_t               *Script;
 } task_cfg_t;
 
 typedef struct _port_cfg_t
@@ -62,16 +56,12 @@ typedef struct _journal_cfg_t
 typedef struct _askue_cfg_t
 {
     device_cfg_t              *Device;
-    size_t                      DeviceAmount;
     comm_cfg_t                *Comm;
-    size_t                      CommAmount;
     task_cfg_t                *Task;
-    size_t                      TaskAmount;
     port_cfg_t                *Port;
     log_cfg_t                 *Log;
     journal_cfg_t             *Journal;
-    uint32_t                 *Network;
-    size_t                    NetworkSize;  
+    long int                 *Network; 
     uint32_t                 Flag;  
 } askue_cfg_t;
 

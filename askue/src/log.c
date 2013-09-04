@@ -36,21 +36,13 @@ int tmp_log_open ( FILE **Ptr, const askue_cfg_t *Cfg, FILE *Log )
 // открыть лог
 int askue_log_open ( FILE **Ptr, const askue_cfg_t *Cfg )
 {
-    char Buffer[ 256 ];
-    
     FILE *_F = fopen ( Cfg->Log->File, Cfg->Log->Mode );
     if ( _F == NULL )
     {
-        if ( snprintf ( Buffer, 256, "Ошибка открытия лога: %d - %s", errno, strerror ( errno ) ) > 0 )
-            write_msg ( stderr, "Лог", "FAIL", Buffer );
-        
         ( *Ptr ) = NULL;
         
         return -1;
     }
-    
-    if ( snprintf ( Buffer, 256, "Лог открыт по адресу: %s", Cfg->Log->File ) > 0 )   
-        verbose_msg ( Cfg->Flag, stderr, "Лог", "OK", Buffer );
         
     ( *Ptr ) = _F;
         

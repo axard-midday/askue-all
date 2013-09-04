@@ -25,11 +25,11 @@ int sqlite3_exec_simple_decore ( sqlite3 *DB, const char *Request )
         
         sqlite3_free ( ErrorStr );
         
-        return -1;
+        return ASKUE_ERROR;
     }
     else
     {
-        return 0;
+        return ASKUE_SUCCESS;
     }
 }
 
@@ -47,11 +47,11 @@ int __init_tbl ( sqlite3 *DB, const char *TblReq, const char *IdReq, __init_func
              !sqlite3_exec_simple_decore ( DB, IdReq ) &&
              !init_func ( DB, init_arg ) )
         {
-            return 0;
+            return ASKUE_SUCCESS;
         }
         else
         {
-            return -1;
+            return ASKUE_ERROR;
         }
     }
     else
@@ -59,153 +59,101 @@ int __init_tbl ( sqlite3 *DB, const char *TblReq, const char *IdReq, __init_func
         if ( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
              !sqlite3_exec_simple_decore ( DB, IdReq ) )
         {
-            return 0;
+            return ASKUE_SUCCESS;
         }
         else
         {
-            return -1;
+            return ASKUE_ERROR;
         }
     }
 }
-
-#define SQL_INS_LOG_TBL \
-"INSERT INTO log_tbl ( date, time, msg ) VALUES ( ( SELECT DATE ( 'now' ) ), ( SELECT TIME ( 'now' ) ), '%s' );"
-#define SQL_CUT_LOG_TBL \
-"DELETE FROM log_tbl WHERE date < ( SELECT DATE ( 'NOW', '-%u day' ) );"
-
-// настройка таблицы лога
-static
-int init_log_tbl ( sqlite3 *DB, void *arg )
-{
-    askue_cfg_t *ACfg = ( askue_cfg_t* ) arg;
-    char *Sql = sqlite3_mprintf ( SQL_CUT_LOG_TBL, ACfg->Journal->Size );
-    int ExecStatus;
-    if ( Sql != NULL )
-    {
-        ExecStatus = sqlite3_exec_simple_decore ( DB, Sql );
-        sqlite3_free ( Sql );
-    }
-    else
-    {
-        write_msg ( stderr, "Журнал", "FAIL", "Таблица лога: ошибка sqlite3_mprintf()" );
-        return -1;
-    }
-    
-    if ( ExecStatus ) return ExecStatus;
-    
-    const char *Msg = "Запуск АСКУЭ";
-    Sql = sqlite3_mprintf ( SQL_INS_LOG_TBL, Msg );
-    if ( Sql != NULL )
-    {
-        ExecStatus = sqlite3_exec_simple_decore ( DB, Sql );
-        sqlite3_free ( Sql );
-    }
-    else
-    {
-        write_msg ( stderr, "Журнал", "FAIL", "Таблица лога: ошибка sqlite3_mprintf()" );
-        return -1;
-    }
-    
-    return ExecStatus;
-}
-#undef SQL_INS_LOG_TBL
-#undef SQL_CUT_LOG_TBL
-
-
-#define SQL_INS_CNT_TBL \
-"INSERT INTO cnt_tbl ( cnt, type ) VALUES ( %u, '%s' );"
-// настройка таблицы счётчиков
-static
-int init_cnt_tbl ( sqlite3 *DB, void *arg )
-{
-    askue_cfg_t *ACfg = ( askue_cfg_t* ) arg;
-    device_cfg_t **Device = ACfg->DeviceList;
-    
-    if ( !sqlite3_exec_simple_decore ( DB, "BEGIN TRANSACTION;" ) )
-    {
-        int Result = 0;
-        for ( int i = 0; Device[ i ] != NULL && !Result; i++ )
-        {
-            if ( Device[ i ]->Class == Askue_Counter )
-            {
-                char *Sql = sqlite3_mprintf ( SQL_INS_CNT_TBL, (size_t) strtol ( Device[ i ]->Name, NULL, 10 ), Device[ i ]->Type->Name );
-                if ( Sql == NULL )
-                {
-                    Result = -1;
-                }
-                else
-                {
-                    Result = sqlite3_exec_simple_decore ( DB, Sql );
-                }
-            }
-        }
-        
-        Result = sqlite3_exec_simple_decore ( DB, "END TRANSACTION;" );
-        
-        return Result;
-    }
-    else
-    {
-        return -1;
-    }
-}
-#undef SQL_INS_CNT_TBL
 
 /*
  * Запросы на создание таблиц
  */
 // таблица показаний
-#define SQL_CRT_REG_TBL "CREATE TABLE IF NOT EXISTS reg_tbl ( cnt integer, value integer, type text, date text, time text );"
-// таблица счётчиков
-#define SQL_CRT_CNT_TBL "CREATE TABLE IF NOT EXISTS cnt_tbl ( cnt integer, type text );"
-// таблица лога событий
-#define SQL_CRT_LOG_TBL "CREATE TABLE IF NOT EXISTS log_tbl ( date text, time text, msg text );"
+#define SQL_MAKE_REG_TBL "CREATE TABLE IF NOT EXISTS reg_tbl ( cnt integer, value integer, type text, date text, time text );"
 
 /*
  * Запросы на создание индексов
  */
 // индекс таблицы показаний
-#define SQL_CRT_REG_ID "CREATE UNIQUE INDEX IF NOT EXISTS reg_id ON reg_tbl ( cnt, type, date, time );"
-// индекс таблицы счётчиков
-#define SQL_CRT_CNT_ID "CREATE UNIQUE INDEX IF NOT EXISTS cnt_id ON cnt_tbl ( cnt, type );"
-// индекс для таблица лога событий
-#define SQL_CRT_LOG_ID "CREATE UNIQUE INDEX IF NOT EXISTS log_id ON log_tbl ( date, time, msg );"
+#define SQL_MAKE_REG_ID "CREATE UNIQUE INDEX IF NOT EXISTS reg_id ON reg_tbl ( cnt, type, date, time );"
 
 /*                Точка первоначальной настройки базы                 */
-int askue_journal_init ( askue_cfg_t *ACfg )
+int askue_journal_init ( askue_cfg_t *ACfg, FILE *Log, int Verbose )
 {
     sqlite3 *DB;
     if ( sqlite3_open ( ACfg->Journal->File, &DB ) != SQLITE_OK )
     {
-        char Buffer[ 256 ];
+        char Buffer[ _ASKUE_TBUFLEN ];
         snprintf ( Buffer, 256, "Попытка открытия: %s", sqlite3_errmsg ( DB ) );
-        write_msg ( stderr, "Журнал", "FAIL", Buffer );
+        write_msg ( Log, "Журнал", "FAIL", Buffer );
         sqlite3_close ( DB );
-        return -1;
+        return ASKUE_ERROR;
     }
     
     int Result;
-    if ( !__init_tbl ( DB, SQL_CRT_REG_TBL, SQL_CRT_REG_ID, NULL, NULL ) &&
-         !__init_tbl ( DB, SQL_CRT_LOG_TBL, SQL_CRT_LOG_ID, init_log_tbl, ACfg ) &&
-         !__init_tbl ( DB, SQL_CRT_CNT_TBL, SQL_CRT_CNT_ID, init_cnt_tbl, ACfg ) )
+    if ( !__init_tbl ( DB, SQL_MAKE_REG_TBL, SQL_MAKE_REG_ID, NULL, NULL ) )
     {
-        verbose_msg ( ACfg->Flag, stdout, "Журнал", "OK", "Инициализация успешно завершена." );
-        Result = 0;
+        if ( Verbose )
+            write_msg ( Log, "Журнал", "OK", "Инициализация успешно завершена." );
+        Result = ASKUE_SUCCESS;
     }
     else
     {
-        verbose_msg ( ACfg->Flag, stdout, "Журнал", "FAIL", "Инициализация остановлена в связи с ошибкой." );
-        Result = -1;
+        if ( Verbose )
+            write_msg ( Log, "Журнал", "FAIL", "Инициализация остановлена в связи с ошибкой." );
+        Result = ASKUE_ERROR;
     }
     
     sqlite3_close ( DB );
     return Result;
 }
 
-#undef SQL_CRT_CNT_ID
-#undef SQL_CRT_LOG_ID
-#undef SQL_CRT_REG_ID
+#undef SQL_MAKE_CNT_ID
 
-#undef SQL_CRT_CNT_TBL
-#undef SQL_CRT_LOG_TBL
-#undef SQL_CRT_REG_TBL
+#undef SQL_MAKE_CNT_TBL
+
+#define SQL_STIFLE_JOURNAL "DELETE FROM reg_tbl WHERE date < ( SELECT DATE ( 'now', '-%u day' ) );"
+
+int askue_journal_stifle ( journal_cfg_t *JCfg, FILE *Log, int Verbose )
+{
+    // текстовый буфер
+    char Buffer[ _ASKUE_TBUFLEN ];
+    // база данных
+    sqlite3 *DB;
+    // открыть
+    if ( sqlite3_open ( ACfg->Journal->File, &DB ) != SQLITE_OK )
+    {
+        // сообщение об ошибке
+        snprintf ( Buffer, 256, "Попытка открытия: %s", sqlite3_errmsg ( DB ) );
+        write_msg ( Log, "Журнал", "FAIL", Buffer );
+        // закрыть базу
+        sqlite3_close ( DB );
+        // ошибка
+        return ASKUE_ERROR;
+    }
+    // ошибка
+    int Result = 0;
+    // сформировать запрос
+    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, SQL_STIFLE_JOURNAL, JCfg->Size ) > 0 )
+    {
+        // выполнить запрос
+        Result = sqlite3_exec_simple_decore ( DB, SQL_STIFLE_JOURNAL );
+    }
+    else
+    {
+        write_msg ( Log, "Журнал", "FAIL", "Ошибка snprintf()." );
+        Result = ASKUE_ERROR;
+    }
+    // закрыть базу
+    sqlite3_close ( DB );
+    // доп. сообщение
+    if ( Verbose && ( Result == ASKUE_SUCCESS ) )
+        write_msg ( Log, "Журнал", "OK", "Журнал успешно сжат." );
+    // результат
+    return Result;
+}
+
+#undef SQL_STIFLE_JOURNAL
