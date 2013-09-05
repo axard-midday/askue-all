@@ -2,44 +2,27 @@
     #define _POSIX_SOURCE
 #endif
 
+#ifndef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 201309L
+#endif
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <string.h>
 #include <errno.h>
-#include <libaskue.h>
+#include <libaskue/write_msg.h>
+#include <libaskue/macro.h>
 
 #include "config.h"
 #include "log.h"
 #include "journal.h"
-
-
-// размер символьного буфера
-// если он не определён при компиляции
-#ifndef _ASKUE_TBUFLEN
-    #define _ASKUE_TBUFLEN 512
-#endif
-
-// результат выполнения - ошибка
-#ifndef ASKUE_ERROR
-    #define ASKUE_ERROR -1
-#endif 
-
-#ifndef ASKUE_RECONF
-    #define ASKUE_RECONF 2
-#endif
-
-// результат выполнения - успех
-#ifndef ASKUE_SUCCESS
-    #define ASKUE_SUCCESS 0
-#endif
-
-// результат выполнения - необходимо штатное завершение
-#ifndef ASKUE_EXIT
-    #define ASKUE_EXIT 1
-#endif
+#include "tbuffer.h"
+#include "ecode.h"
 
 // число аргументов для скрипта
 #ifndef ASKUE_SCRIPT_ARGV_SIZE
@@ -68,10 +51,11 @@ typedef struct script_argv_s
 } script_argv_t;
 
 /* Глобальные переменные */
-static FILE                   *_gLog_;
-static askue_cfg_t            *_gCfg_;
-script_argv_t                *_gArgv_;
-sigset_t                      *_gSignalSet_;
+static FILE                    *_gLog_;
+static askue_cfg_t             *_gCfg_;
+script_argv_t                  *_gArgv_;
+sigset_t                       *_gSignalSet_;
+//char                            _gBuffer_[ _ASKUE_TBUFLEN ];
 
 /* Функции */
 
@@ -133,7 +117,7 @@ int set_verbose ( char *arg, int Verbose, int *i )
 }
 
 /* установка аргумента отвечающего за отображение протокола */
-int set_protocol ( char *arg, int Protocol )
+int set_protocol ( char *arg, int Protocol, int *i )
 {
     if ( Protocol )
     {
@@ -153,8 +137,45 @@ int set_protocol ( char *arg, int Protocol )
     }
 }
 
+
+/* проверить результат выполнения скрипта */
+static
+int wait_script_result ( const char *Name, pid_t pid )
+{
+    int status;
+    pid_t WaitpidReturn = waitpid ( pid, &status, WNOHANG );
+    if ( WaitpidReturn == -1 )
+    {
+        if ( snprintf( _gBuffer_, _ASKUE_TBUFLEN, "waitpid(): %s (%d)", strerror ( errno ), errno ) > 0 )
+            write_msg ( _gLog_, "АСКУЭ", "FAIL", _gBuffer_ );
+        return ASKUE_ERROR;
+    }
+    else if ( WaitpidReturn == 0 )
+    {
+        write_msg ( _gLog_, "АСКУЭ", "FAIL", "Ложный сигнал SIGCHLD" );
+        return ASKUE_SUCCESS;
+    }
+    
+    if ( WIFEXITED ( status ) ) // успешное завершение, т.е. через exit или return
+    {
+        int code = WEXITSTATUS ( status );
+        if ( code != EXIT_SUCCESS )
+        {
+            if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, "Скрипт '%s' завершён с кодом: %d", Name, code ) > 0 )
+                write_msg ( _gLog_, "АСКУЭ", "ERROR", _gBuffer_ );
+        }
+    }
+    else if ( WIFSIGNALED ( status ) ) // завершение по внешнему сигналу
+    {
+        if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, "Скрипт '%s' завершён по сигналу: %d", Name, WTERMSIG ( status ) ) > 0 )
+            write_msg ( _gLog_, "АСКУЭ", "ERROR", _gBuffer_ );
+    }
+    
+    return ASKUE_SUCCESS;
+}
+
 /* Ожидание сигналов извне или от дочернего процесса */
-int wait_signal ( pid_t pid )
+int wait_signal ( const char *Name, pid_t pid, int Verbose )
 {
     siginfo_t SignalInfo;
     if ( sigwaitinfo ( _gSignalSet_, &SignalInfo ) == -1 ) // ожидание сигнала
@@ -169,7 +190,7 @@ int wait_signal ( pid_t pid )
         {
             case SIGCHLD: // завершить потомка
             
-                Result = wait_script_result ( pid );
+                Result = wait_script_result ( Name, pid );
                 break;
                 
             case SIGUSR1: // прочитать заново конфигурацию
@@ -178,18 +199,19 @@ int wait_signal ( pid_t pid )
                 if ( kill ( pid, SIGUSR2 ) )
                     write_msg ( _gLog_, "Сигнал", "ERROR", "kill()" );
                 // Доп. сообщение
-                if ( TESTBIT ( _gCfg_->Flag, ASKUE_FLAG_VERBOSE ) )
+                if ( Verbose )
                     write_msg ( _gLog_, "Сигнал", "OK", "Выполнить переконфигурацию" );
                 // завершение потомка
-                Result = wait_script_result ( pid );
+                Result = wait_script_result ( Name, pid );
                 break;
                 
             default:
+            
                 // сигнал завершения потомку
                 if ( kill ( pid, SIGUSR2 ) )
                     write_msg ( _gLog_, "Сигнал", "ERROR", "kill()" );
                 // Доп. сообщение
-                if ( TESTBIT ( _gCfg_->Flag, ASKUE_FLAG_VERBOSE ) )
+                if ( Verbose )
                     write_msg ( _gLog_, "Сигнал", "OK", "Завершить работу АСКУЭ" );
                 Result = ASKUE_EXIT;
                 break;
@@ -206,21 +228,21 @@ int exec_script ( const script_argv_t *Argv )
     
     // запись значения аргументов
     int i = 0;
-    int Result = ( set_strparam ( ( arg + i ), "%s", Argv->Name, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--port_file=%s", Argv->Port_File, &i ) ) ?: 
-                 ( set_strparam ( ( arg + i ), "--port_speed=%s", Argv->Port_Speed, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--port_dbits=%s", Argv->Port_DBits, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--port_sbits=%s", Argv->Port_SBits, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--port_parity=%s", Argv->Port_Parity, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--device=%s", Argv->Device, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--parametr=%s", Argv->Parametr, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--argument=%s", Argv->Argument, &i ) ) ?:
-                 ( set_lintparam ( ( arg + i ), "--timeout=%ld", Argv->Timeout, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--journal_file=%s", Argv->Journal_File, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--journal_flashback=%u", Argv->Journal_Flashback, &i ) ) ?:
-                 ( set_strparam ( ( arg + i ), "--log_file=%s", Argv->Log_File, &i ) ) ?:
-                 ( set_protocol ( ( arg + i ), Argv->Protocol, &i ) ) ?:
-                 ( set_verbose ( ( arg + i ), Argv->Verbose, &i ) ) ?: ASKUE_SUCCESS;
+    int Result = ( set_strparam ( arg[ i ], "%s", Argv->Name, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--port_file=%s", Argv->Port_File, &i ) ) ?: 
+                 ( set_strparam ( arg[ i ], "--port_speed=%s", Argv->Port_Speed, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--port_dbits=%s", Argv->Port_DBits, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--port_sbits=%s", Argv->Port_SBits, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--port_parity=%s", Argv->Port_Parity, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--device=%s", Argv->Device, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--parametr=%s", Argv->Parametr, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--argument=%s", Argv->Argument, &i ) ) ?:
+                 ( set_lintparam ( arg[ i ], "--timeout=%ld", Argv->Timeout, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--journal_file=%s", Argv->Journal_File, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--journal_flashback=%u", Argv->Journal_Flashback, &i ) ) ?:
+                 ( set_strparam ( arg[ i ], "--log_file=%s", Argv->Log_File, &i ) ) ?:
+                 ( set_protocol ( arg[ i ], Argv->Protocol, &i ) ) ?:
+                 ( set_verbose ( arg[ i ], Argv->Verbose, &i ) ) ?: ASKUE_SUCCESS;
     
     // null-оканчивающийся массив со значениями аргументов             
     const char *_arg[ i + 1 ] = { [ 0 ... i ] = NULL };
@@ -230,6 +252,9 @@ int exec_script ( const script_argv_t *Argv )
     // выполнить скрипт
     if ( execvp ( _arg[ 0 ], ( char * const * ) _arg ) )
     {
+        // ошибка
+        if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, "Ошибка exec_script().execvp(): %s ( %d ).", strerror ( errno ), errno ) > 0 )
+            write_msg ( _gLog_, "АСКУЭ", "FAIL", _gBuffer_ );
         return ASKUE_ERROR;
     }
 }
@@ -259,7 +284,7 @@ int run_script ( pid_t *ScriptPid, const script_argv_t *Argv )
 }
 
 // символы равны
-int is_eq ( int _1, int _2 )
+int is_eqch ( int _1, int _2 )
 {
     return _1 == _2;
 }
@@ -272,100 +297,70 @@ int is_endstr ( int ch )
 
 // сравнить две строки
 // если их длины не равны, то они получатся не равными
-int cmp ( const char *s1, const char *s2 )
+int is_eqstr ( const char *s1, const char *s2 )
 {
-    int R = 0;
-    while ( !is_endstr ( *s1 ) &&
-             !is_endstr ( *s2 ) &&
-             ( R = is_eq ( *s1, *s2 ) ) )
-    {
-        s1++;
-        s2++;
-        R = 0;
-    }
+    int R, End;
+    do {
+        End = is_endstr ( *s1 ) || is_endstr ( *s2 ); // конец строки
+        R = is_eqch ( *s1, *s2 );   // сравнить два символа
+    } while ( R && !End );
+    
     return R;
 }
 
-/* это последнее устройство */
-int is_last_device ( const device_cfg_t *TheDevice )
-{
-    return ( TheDevice->Name == NULL ) &&
-            ( TheDevice->Type == NULL ) &&
-            ( TheDevice->Timeout == 0 ) &&
-            ( TheDevice->Id == 0 );
-}
+
 
 /* следующее устройство соответствующее цели */
-void next_target_device ( const device_cfg_t **Device, const char *Target )
+const device_cfg_t* next_target_device ( const device_cfg_t *Device, const char *Target )
 {
-    // список устройств
-    const device_cfg_t *TheDevice = ( *Device );
     // результат
     const device_cfg_t *Result = NULL;
     // перерор до конца
-    for ( size_t i = 0; !is_last_device ( TheDevice ) && ( Result == NULL ); i++ )
+    for ( const device_cfg_t *TheDevice = Device; !is_last_device ( TheDevice ) && ( Result == NULL ); TheDevice ++ )
     {
         // сравнить строку с название типа устройства и целью задачи
-        if ( cmp ( TheDevice->Type, Target ) )
+        if ( is_eqstr ( TheDevice->Type, Target ) )
         {
             // нашли результат
             Result = TheDevice;
         }
-        else
-        {
-            // следующее устройство
-            TheDevice ++;
-        }
     }
     // вернуть результат
-    ( *Device ) = Result;
+    return Result;
 }
 
 /* найти коммуникацию по индексу */
 const comm_cfg_t* find_comm ( const comm_cfg_t *Comm, int Id )
 {
     const comm_cfg_t *Result = NULL;
-    for ( size_t i = 0; is_last_comm ( Comm ) && ( Result == NULL ); i++ )
+    for ( const comm_cfg_t *TheComm = Comm; !is_last_comm ( TheComm ) && ( Result == NULL ); TheComm ++ )
     {
-        if ( Comm->Device->Id == Id )
+        if ( Comm->Device->Id == Id ) // проверка по индексу
         {
-            Result = Comm;
-        }
-        else
-        {
-            Comm ++;
+            Result = Comm;  // нашли результат
         }
     }
     return Result;
 }
 
-/* это последняя задача */
-int is_last_task ( const task_cfg_t *Task )
-{
-    return ( Task->Script == NULL ) &&
-            ( Task->Target == NULL );
-}
+
 
 /* найти устройство по индексу */
 const device_cfg_t* find_device ( const device_cfg_t *Device, int Id )
 {
     const device_cfg_t *Result = NULL;
-    for ( size_t i = 0; is_last_device ( Device ) && ( Result == NULL ); i++ )
+    for ( const device_cfg_t *TheDevice = Device; !is_last_device ( TheDevice ) && ( Result == NULL ); TheDevice ++ )
     {
-        if ( Device->Id == Id )
+        if ( Device->Id == Id ) // проверить по индексу
         {
-            Result = Device;
-        }
-        else
-        {
-            Device ++;
+            Result = Device;    // нашли результат
         }
     }
     return Result;
 }
 
 /* соединение через модем */
-int askue_connect ( const comm_cfg_t *TheCommB, const device_cfg_t *TheCommR )
+int askue_connect ( const comm_cfg_t *TheCommB, const device_cfg_t *TheCommR, int Verbose )
 {
     // аргументы нужные скрипту
     script_argv_t Argv = ( *_gArgv_ );
@@ -382,32 +377,113 @@ int askue_connect ( const comm_cfg_t *TheCommB, const device_cfg_t *TheCommR )
         return -1;
     }
     // ожидание сигнала от потомка и всяких других.
-    return wait_signal ( ScriptPid );
+    return wait_signal ( Argv->Name, ScriptPid, Verbose );
+}
+
+// сообщить информацию о задаче 
+int say_task_info ( const task_cfg_t *Task )
+{
+    char Buffer[ _ASKUE_TBUFLEN ];
+    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "Обрабатывается задача: '%s'.", Task->Target ) > 0 )
+    {
+        write_msg ( _gLog_, "АСКУЭ", "INFO", Buffer );
+        return ASKUE_SUCCESS;
+    }
+    else
+    {
+        return ASKUE_ERROR;
+    }
+}
+
+// сообщить информацию об устройстве
+void say_task_info ( const device_cfg_t *Device )
+{
+    char Buffer[ _ASKUE_TBUFLEN ];
+    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "Обрабатывается устройство: '%s'.", Device->Name ) > 0 )
+    {
+        write_msg ( _gLog_, "АСКУЭ", "INFO", Buffer );
+        return ASKUE_SUCCESS;
+    }
+    else
+    {
+        return ASKUE_ERROR;
+    }
+}
+
+// сообщить информацию об установке соединения
+void say_comm_info ( const device_cfg_t *DeviceB, const device_cfg_t *DeviceR )
+{
+    char Buffer[ _ASKUE_TBUFLEN ];
+    const char *Tmp = "Установка канала связи: '%s: %s' ---> '%s: %s'.";
+    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, Tmp, DeviceB->Type, DeviceB->Name, DeviceR->Type, DeviceR->Name ) > 0 )
+    {
+        write_msg ( _gLog_, "АСКУЭ", "INFO", Buffer );
+        return ASKUE_SUCCESS;
+    }
+    else
+    {
+        return ASKUE_ERROR;
+    }
+}
+
+
+// выполнение скриптов
+int do_scripts ( const script_cfg_t *Script, const device_cfg_t *Device )
+{
+    // аргументы нужные скрипту
+    script_argv_t Argv = ( *_gArgv_ );
+    // имя устройства и таймаут не изменяться для всего списка устройств
+    Argv.Device = Device->Name;
+    Argv.Timeout = Device->Timeout;
+    int Result = ASKUE_SUCCESS;
+    // перебор скриптов
+    for ( const script_cfg_t *TheScript = Script; !is_last_script ( TheScript ) && ( Result == ASKUE_SUCCESS ); TheScript++ )
+    {
+        // pid процесса скрипта
+        pid_t ScriptPid;
+        // имя скрипта
+        Argv.Name = TheScript->Name;
+        // Параметр скрипта
+        Argv.Parametr = TheScript->Parametr;
+        // аргумент скрипта
+        Argv.Argument = NULL;
+        // запуск скрипта
+        if ( run_script ( &ScriptPid, &Argv ) == ASKUE_ERROR )
+        {
+            Result = ASKUE_ERROR;
+            break;
+        }
+        Result = wait_signal ( TheScript->Name, ScriptPid );
+    }
+    
+    return Result;
 }
 
 /* рабочий процесс выполнения задач */
 int task_workflow ( const task_cfg_t *Task, 
                      const comm_cfg_t *Comm, 
                      const device_cfg_t *Device,
-                     const int *Network )
+                     const int *Network,
+                     int Verbose )
 {
     // результат выполнения
-    int Result;
+    int Result = ASKUE_SUCCESS;
     // перебор задач
-    for ( size_t i = 0; is_last_task ( Task ); i++ )
+    for ( const task_cfg_t *TheTask = Task; is_last_task ( TheTask ) && ( Result == ASKUE_SUCCESS ); TheTask++ )
     {
-        // текущая задача
-        const task_cfg_t *TheTask = Task + i;
+        // Доп. сообщение о задаче
+        if ( Verbose && ( say_task_info ( TheTask ) == ASKUE_ERROR ) ) return ASKUE_ERROR;
         
-        // перебор подходящих устройств
-        const device_cfg_t *TheDevice = Device;
-        next_target_device ( &TheDevice, Task->Target );
-        // отслеживание ошибки связанной с отсутствием целевых устройств
-        if ( TheDevice == NULL )
+        int NoTargetDevice = 1;
+        
+        for ( const device_cfg_t *TheDevice = next_target_device ( Device, TheTask->Target )
+              ( TheDevice != NULL ) && !is_last_device ( TheDevice ) && ( Result == ASKUE_SUCCESS ); 
+              TheDevice = next_target_device ( TheDevice, TheTask->Target ) )
         {
-            continue; // перейти к следующей задачи.
-        }
-        else do {
+            // целевые устройства есть
+            NoTargetDevice = 0; 
+            // Доп. сообщение об устройстве
+            if ( Verbose && ( say_device_info ( TheDevice ) == ASKUE_ERROR ) ) return ASKUE_ERROR;
             // если устройство удалено от компьютера
             if ( Network[ TheDevice->Id ] != 0 )
             {
@@ -418,28 +494,31 @@ int task_workflow ( const task_cfg_t *Task,
                 // найти описание удалённого и местного модемов
                 const comm_cfg_t *TheCommB = find_comm ( Comm, CommB );
                 const device_cfg_t *TheCommR = find_device ( Device, CommR );
+                // Доп. сообщение о подключении к устройству
+                if ( Verbose && ( say_comm_info ( TheCommB->Device, TheCommR ) == ASKUE_ERROR ) ) return ASKUE_ERROR;
                 // установить соединение
                 int Connect = askue_connect ( TheCommB, TheCommR );
                 // отслеживание ошибок
                 if ( Connect == ASKUE_ERROR )
                 {
                     Result = ASKUE_ERROR;
-                    break;
                 }
-                // отслеживаем отсутствие соединения
-                else if ( Connect == 0 )
+                else if ( Connect == 0 ) // отслеживаем отсутствие соединения
                 {
-                    break;
+                    if ( Verbose ) write_msg ( _gLog_, "АСКУЭ", "INFO", "Ошибка соединения." );
+                    break; // к другой задаче
+                }
+                else if ( Verbose )
+                {
+                    write_msg ( _gLog_, "АСКУЭ", "INFO", "Соединение установлено." );
                 }
             }
             // выполнение скриптов задачи
-            Result = do_scripts ( Task->Script, TheDevice );
-            // отслеживание ошибок
-            if ( Result == ASKUE_ERROR )
-                break;
-            // перейти к следующему подходящему устройству
-            next_target_device ( &TheDevice, Task->Target );
-        } while ( TheDevice != NULL );
+            Result = ( Result == ASKUE_SUCCESS ) ? do_scripts ( Task->Script, TheDevice ) : ASKUE_ERROR;
+        }
+        
+        if ( NoTargetDevice )
+            write_msg ( _gLog_, "АСКУЭ", "ERROR", "Нет целевых устройств." );
     }
     // конец
     return Result;
@@ -465,7 +544,6 @@ int full_reconfigure ( void )
         reinit_script_argv (); // перенастроить аргументы
         return ASKUE_SUCCESS;
     }
-        
 }
 
 /* рабочий процесс программы */
@@ -474,7 +552,11 @@ int workflow ( void )
     int R;
     do {
         // выполнить задачи
-        R = task_workflow ( _gCfg_->Task, _gCfg_->Comm, _gCfg_->Device, _gCfg_->Network );
+        R = task_workflow ( _gCfg_->Task, 
+                            _gCfg_->Comm, 
+                            _gCfg_->Device, 
+                            _gCfg_->Network,
+                            TESTBIT ( _gCfg_->Flag, ASKUE_FLAG_VERBOSE ) );
         // отслеживание запрос на переконфигурацию
         if ( R == ASKUE_RECONF ) 
         {
@@ -489,8 +571,7 @@ int workflow ( void )
         }
         
         // обрезать лог
-        R = askue_log_cut ( &_gLog_, _gCfg_ );
-        // ошибка отслеживания
+        R = askue_log_stifle ( &_gLog_, _gCfg_ );
         if ( R == ASKUE_ERROR )
         {
             // ошибка
@@ -603,8 +684,8 @@ int open_log ( FILE **pLog, const askue_cfg_t *cfg, int Verbose )
         // сообщение
         if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "Лог открыт по адресу: %s", cfg->Log->File ) > 0 )
         {
-            write_msg ( stdout, "Лог", "OK", Buffer );
-            write_msg ( *pLog, "Лог", "OK", Buffer );
+            write_msg ( stdout, "Лог", "INFO", Buffer );
+            write_msg ( *pLog, "Лог", "INFO", Buffer );
             return ASKUE_SUCCESS;
         }
         else
@@ -672,7 +753,7 @@ int daemonize_askue ( FILE *Log, int Verbose )
     }
     else if ( Verbose )
     {
-        write_msg (Log, "АСКУЭ", "OK", "Новая сессия создан." );
+        write_msg (Log, "АСКУЭ", "INFO", "Новая сессия создан." );
     }
     // сменить рабочий каталог
     if ( chdir ( "/" ) == -1 )
@@ -684,7 +765,7 @@ int daemonize_askue ( FILE *Log, int Verbose )
     }
     else if ( Verbose )
     {
-        write_msg ( Log, "АСКУЭ", "OK", "Рабочий каталог изменён." );
+        write_msg ( Log, "АСКУЭ", "INFO", "Рабочий каталог изменён." );
     }
     
     return ASKUE_SUCCESS;
@@ -751,7 +832,7 @@ int fork_from_terminal ( FILE *Log, int Verbose )
             // дополнительное сообщение
             if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "АСКУЭ запущенс pid = %ld", ( long int ) Pid ) > 0 )
             {
-                write_msg ( Log, "Запуск АСКУЭ", "OK", Buffer );
+                write_msg ( Log, "Запуск АСКУЭ", "INFO", Buffer );
             }
             else
             {
@@ -788,22 +869,25 @@ void destroy_config ( void )
 static
 int reconfigure ( void )
 {
+    // сохранить флаги
+    int FlagStorage = _gCfg_->Flag;
     // удалить старую конфигурацию
     askue_config_destroy ( _gCfg_ );
     // инициализировать память
     askue_config_init ( _gCfg_ );
+    // возврат флагов на место
+    _gCfg_->Flag = FlagStorage;
     // прочитать файл конфигурации
-    return askue_config_read ( _gCfg_ );
+    return askue_config_read ( _gCfg_, _gLog_ );
 }
 
 // переоткрыть лога
 static
 int reopen_log ( void )
 {
+    write_msg ( _gLog_, "Лог", "INFO", "Лог будет закрыт." );
     // закрыть старый поток лога
     askue_log_close ( &_gLog_ );
-    // буфер текстовых сообщений 
-    char Buffer[ _ASKUE_TBUFLEN ];
     // открыть новый поток лога
     if ( askue_log_open ( &_gLog_, _gCfg_ ) == ASKUE_ERROR )
     {
@@ -812,9 +896,9 @@ int reopen_log ( void )
     else if ( TESTBIT ( _gCfg_->Flag, ASKUE_FLAG_VERBOSE ) ) // вывести в лог дополнительные сообщения
     {
         // сообщение
-        if ( snprintf ( Buffer, _ASKUE_TBUFLEN, "Лог открыт по адресу: %s", _gCfg_->Log->File ) > 0 )
+        if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, "Лог открыт по адресу: %s", _gCfg_->Log->File ) > 0 )
         {
-            write_msg ( _gLog_, "Лог", "OK", Buffer );
+            write_msg ( _gLog_, "Лог", "INFO", _gBuffer_ );
             return ASKUE_SUCCESS;
         }
         else
@@ -846,10 +930,10 @@ script_argv_t init_script_argv ( askue_cfg_t *Cfg )
         .Verbose = TESTBIT ( Cfg->Flag->ASKUE_FLAG_VERBOSE ),
         .Protocol = TESTBIT ( Cfg->Flag->ASKUE_FLAG_DEBUG ),
         // переменные
-        .Timeout = 0;
-        .Parametr = NULL;
-        .Name = NULL;
-        .Argument = NULL;
+        .Timeout = 0,
+        .Parametr = NULL,
+        .Name = NULL,
+        .Argument = NULL,
         .Device = NULL
     };
 }
@@ -910,10 +994,10 @@ int main ( int argc, char **argv )
     if ( program_args_to_config ( &Cfg, argc, argv ) == ASKUE_ERROR ) exit ( EXIT_FAILURE );
     
     // Прочитать конфиг
-    if ( askue_config_read ( &Cfg ) == ASKUE_ERROR ) exit ( EXIT_FAILURE );
+    if ( askue_config_read ( &Cfg, stderr ) == ASKUE_ERROR ) exit ( EXIT_FAILURE );
     
     // настроить журнал 
-    if ( askue_journal_init ( &Cfg, stdout, TESTBIT ( Cfg.Flag, ASKUE_FLAG_VERBOSE ) ) == ASKUE_ERROR ) exit( EXIT_FAILURE );
+    if ( askue_journal_init ( Cfg.Journal, stdout, TESTBIT ( Cfg.Flag, ASKUE_FLAG_VERBOSE ) ) == ASKUE_ERROR ) exit( EXIT_FAILURE );
     
     // Открыть лог.   
     FILE *Log;
@@ -939,7 +1023,7 @@ int main ( int argc, char **argv )
     
     // Запустить рабочий процесс ( Опрос, отчёты, обрезка лога, обрезка журнала пока нет ошибок. )
     // И завершить его
-    return ( run_workflow () == ASKUE_ERROR ) ? EXIT_FAILURE : EXIT_SUCCESS;
+    return ( workflow () == ASKUE_ERROR ) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 

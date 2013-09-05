@@ -6,11 +6,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define ASKUE_FLAG_VERBOSE 0
-#define ASKUE_FLAG_DEBUG 1
-#define ASKUE_FLAG_PROTOCOL 2
-
-
 /*
  * СТРОКОВЫЕ БУФЕРЫ
  */

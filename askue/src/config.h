@@ -4,6 +4,12 @@
 #include <libconfig.h>
 #include <stdint.h>
 
+#ifndef _ASKUE_DEBUG
+    #define ASKUE_FILE_CONFIG "/etc/askue/config"
+#else
+    #define ASKUE_FILE_CONFIG "./config"
+#endif
+
 typedef struct _device_cfg_t
 {
     char                        *Name;
@@ -65,12 +71,11 @@ typedef struct _askue_cfg_t
     uint32_t                 Flag;  
 } askue_cfg_t;
 
-
 // инициализироать переменную конфигурации
 void askue_config_init ( askue_cfg_t *ACfg );
 
 // прочитать конфигурацию из файла
-int askue_config_read ( askue_cfg_t *ACfg );
+int askue_config_read ( askue_cfg_t *ACfg, FILE *Log );
 
 // удалить память выделенную под конфигурацию
 void askue_config_destroy ( askue_cfg_t *ACfg );

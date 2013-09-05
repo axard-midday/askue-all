@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sqlite3.h>
-#include <libaskue.h>
+#include <libaskue/write_msg.h>
+#include <libaskue/macro.h>
 
 #include "config.h"
+#include "ecode.h"
+#include "tbuffer.h"
 
 
 
@@ -37,34 +40,21 @@ int sqlite3_exec_simple_decore ( sqlite3 *DB, const char *Request )
 static 
 int __init_tbl ( sqlite3 *DB, const char *TblReq, const char *IdReq, __init_func_f init_func, void *init_arg )
 {
-    // таблица
-    // Индекс
-    // Инициализация ( если есть )
-    
-    if ( init_func != NULL )
+    if ( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
+         !sqlite3_exec_simple_decore ( DB, IdReq ) )
     {
-        if ( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
-             !sqlite3_exec_simple_decore ( DB, IdReq ) &&
-             !init_func ( DB, init_arg ) )
+        if ( init_func != NULL ) 
         {
-            return ASKUE_SUCCESS;
+            return init_func ( DB, init_arg );
         }
         else
         {
-            return ASKUE_ERROR;
+            return ASKUE_SUCCESS;
         }
     }
     else
     {
-        if ( !sqlite3_exec_simple_decore ( DB, TblReq ) &&
-             !sqlite3_exec_simple_decore ( DB, IdReq ) )
-        {
-            return ASKUE_SUCCESS;
-        }
-        else
-        {
-            return ASKUE_ERROR;
-        }
+        return ASKUE_ERROR;
     }
 }
 
@@ -81,14 +71,13 @@ int __init_tbl ( sqlite3 *DB, const char *TblReq, const char *IdReq, __init_func
 #define SQL_MAKE_REG_ID "CREATE UNIQUE INDEX IF NOT EXISTS reg_id ON reg_tbl ( cnt, type, date, time );"
 
 /*                Точка первоначальной настройки базы                 */
-int askue_journal_init ( askue_cfg_t *ACfg, FILE *Log, int Verbose )
+int askue_journal_init ( const journal_cfg_t *JCfg, FILE *Log, int Verbose )
 {
     sqlite3 *DB;
-    if ( sqlite3_open ( ACfg->Journal->File, &DB ) != SQLITE_OK )
+    if ( sqlite3_open ( JCfg->File, &DB ) != SQLITE_OK )
     {
-        char Buffer[ _ASKUE_TBUFLEN ];
-        snprintf ( Buffer, 256, "Попытка открытия: %s", sqlite3_errmsg ( DB ) );
-        write_msg ( Log, "Журнал", "FAIL", Buffer );
+        if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, "Попытка открытия: %s", sqlite3_errmsg ( DB ) ) > 0 )
+            write_msg ( Log, "Журнал", "FAIL", _gBuffer_ );
         sqlite3_close ( DB );
         return ASKUE_ERROR;
     }
@@ -117,18 +106,16 @@ int askue_journal_init ( askue_cfg_t *ACfg, FILE *Log, int Verbose )
 
 #define SQL_STIFLE_JOURNAL "DELETE FROM reg_tbl WHERE date < ( SELECT DATE ( 'now', '-%u day' ) );"
 
-int askue_journal_stifle ( journal_cfg_t *JCfg, FILE *Log, int Verbose )
+int askue_journal_stifle ( const journal_cfg_t *JCfg, FILE *Log, int Verbose )
 {
-    // текстовый буфер
-    char Buffer[ _ASKUE_TBUFLEN ];
     // база данных
     sqlite3 *DB;
     // открыть
-    if ( sqlite3_open ( ACfg->Journal->File, &DB ) != SQLITE_OK )
+    if ( sqlite3_open ( JCfg->File, &DB ) != SQLITE_OK )
     {
         // сообщение об ошибке
-        snprintf ( Buffer, 256, "Попытка открытия: %s", sqlite3_errmsg ( DB ) );
-        write_msg ( Log, "Журнал", "FAIL", Buffer );
+        if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, "Попытка открытия: %s", sqlite3_errmsg ( DB ) ) > 0 )
+            write_msg ( Log, "Журнал", "FAIL", _gBuffer_ );
         // закрыть базу
         sqlite3_close ( DB );
         // ошибка
@@ -137,10 +124,10 @@ int askue_journal_stifle ( journal_cfg_t *JCfg, FILE *Log, int Verbose )
     // ошибка
     int Result = 0;
     // сформировать запрос
-    if ( snprintf ( Buffer, _ASKUE_TBUFLEN, SQL_STIFLE_JOURNAL, JCfg->Size ) > 0 )
+    if ( snprintf ( _gBuffer_, _ASKUE_TBUFLEN, SQL_STIFLE_JOURNAL, JCfg->Size ) > 0 )
     {
         // выполнить запрос
-        Result = sqlite3_exec_simple_decore ( DB, SQL_STIFLE_JOURNAL );
+        Result = sqlite3_exec_simple_decore ( DB, _gBuffer_ );
     }
     else
     {

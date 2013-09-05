@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
-#include <libaskue.h>
+#include <libaskue.h/write_msg.h>
+#include <libaskue/macro.h>
 
 #include "config.h"
+#include "flag.h"
+#include "ecode.h"
 
 // открыть временный лог
 // сюда копируются остатки от обрезания
@@ -14,7 +17,7 @@ int tmp_log_open ( FILE **Ptr, const askue_cfg_t *Cfg, FILE *Log )
     if ( snprintf ( Buffer, 256, "%s.tmp", Cfg->Log->File ) == -1 )
     {
         write_msg ( Log, "Временный лог", "FAIL", "tmp_log_open(): snprintf()" );
-        return -1;
+        return ASKUE_ERROR;
     }
     
     FILE *_F = fopen ( Buffer, "w" );
@@ -25,12 +28,12 @@ int tmp_log_open ( FILE **Ptr, const askue_cfg_t *Cfg, FILE *Log )
         
         ( *Ptr ) = NULL;
         
-        return -1;
+        return ASKUE_ERROR;
     }
         
     ( *Ptr ) = _F;
         
-    return 0;
+    return ASKUE_SUCCESS;
 }
 
 // открыть лог
@@ -41,12 +44,12 @@ int askue_log_open ( FILE **Ptr, const askue_cfg_t *Cfg )
     {
         ( *Ptr ) = NULL;
         
-        return -1;
+        return ASKUE_ERROR;
     }
         
     ( *Ptr ) = _F;
         
-    return 0;
+    return ASKUE_SUCCESS;
 }
 
 // открыть лог заново
@@ -58,12 +61,12 @@ int askue_log_reopen ( FILE **Ptr, const char *File, const char *Mode )
     {
         ( *Ptr ) = NULL;
         
-        return -1;
+        return ASKUE_ERROR;
     }
         
     ( *Ptr ) = _F;
         
-    return 0;
+    return ASKUE_SUCCESS;
 }
 
 
@@ -121,7 +124,7 @@ int __copy_file ( FILE *New, FILE *Old )
         FlagWError = fwrite ( buf, sizeof ( char ), ReadAmount, New ) != ReadAmount;
     }
     
-    return ( FlagWError ) ? -1 : 0;
+    return ( FlagWError ) ? ASKUE_ERROR : ASKUE_SUCCESS;
 }
 
 // новый лог заместо старого
@@ -130,30 +133,30 @@ int __rewind_log ( const askue_cfg_t *Cfg )
 {
     if ( remove ( Cfg->Log->File ) )
     {
-        return -1;
+        return ASKUE_ERROR;
     }
     char Buffer[ 256 ];
     if ( snprintf ( Buffer, 256, "%s.tmp", Cfg->Log->File ) == -1 )
     {
-        return -1;
+        return ASKUE_ERROR;
     }
     
-    return ( rename ( Buffer, Cfg->Log->File ) ) ? -1 : 0;
+    return ( rename ( Buffer, Cfg->Log->File ) ) ? ASKUE_ERROR : ASKUE_SUCCESS;
 }
 
 // обрезать лог
-int askue_log_cut ( FILE **Log, const askue_cfg_t *Cfg )
+int askue_log_stifle ( FILE **Log, const askue_cfg_t *Cfg )
 {
     FILE *Old = ( *Log );
     FILE *New;
     
     // временный файл лога
     if ( tmp_log_open ( &New, Cfg, Old ) == -1 )
-        return -1;
+        return ASKUE_ERROR;
     // переоткрыть на чтение
     fclose ( Old );
     if ( askue_log_reopen ( &Old, Cfg->Log->File, "r" ) )
-        return -1;
+        return ASKUE_ERROR;
     // вернуться к началу файла лога
     rewind ( Old );
     // всего строк
@@ -168,19 +171,19 @@ int askue_log_cut ( FILE **Log, const askue_cfg_t *Cfg )
     __skeep_lines ( Old, ToDelete );
     // копировать оставщееся в новый файл
     if ( __copy_file ( New, Old ) )
-        return -1;
+        return ASKUE_ERROR;
 
     fclose ( New );
     fclose ( Old );
     
     if ( __rewind_log ( Cfg ) )
-        return -1;
+        return ASKUE_ERROR;
 
     if ( askue_log_reopen ( Log, Cfg->Log->File, "a" ) )
-        return -1;
-    
-    // забавно звучит :-)
-    verbose_msg ( Cfg->Flag, ( *Log ), "Лог", "OK", "Обрезание успешно завершено" );
+        return ASKUE_ERROR;
         
-    return 0;
+    if ( TESTBIT ( Cfg->Flag, ASKUE_FLAG_VERBOSE ) )
+        write_msg ( (*Log), "АСКУЭ", "OK", "Лог успешно сжат." );
+        
+    return ASKUE_SUCCESS;
 }
